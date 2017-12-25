@@ -23,10 +23,10 @@ def reset_test():
     (its also all the data for the project)
     """
 
-    ladcp, ctd, bathy = data_load.load_data()
-    rho_neutral =  np.genfromtxt('neutral_rho.csv', delimiter=',')
+    ladcp, ctd = data_load.load_data()
+#    rho_neutral =  np.genfromtxt('neutral_rho.csv', delimiter=',')
     strain = np.genfromtxt('strain.csv', delimiter=',')
-    N2 = np.genfromtxt('ref_N2.csv', delimiter=',')
+#    N2 = np.genfromtxt('ref_N2.csv', delimiter=',')
     wl_max=1000
     wl_min=300
     ctd_bin_size=1024
@@ -176,7 +176,7 @@ def PE_strain(N2, z, strain, wl_min, wl_max, bin_idx, detrend='constant'):
 
     N2mean = np.vstack(N2mean)
 
-    PE = 0.5*eta1*N2mean
+    PE = 0.5*1027*eta1*N2mean
 
     return PE, f_grid, eta_psd, N2mean
 
@@ -188,6 +188,7 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, detrend=False):
 
     """
 
+    # Clean Up velocity data (u' = U - u_bar)
     Upoly = []
     for cast in U.T:
         fitrev = oc.vert_polyFit(cast, z[:, 0], 100, deg=1)
@@ -222,7 +223,7 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, detrend=False):
 
 
     # New Version
-    KE = 0.5*(Pu + Pv)
+    KE = 0.5*1027*(Pu + Pv)
     clean  = KE_psd < 1e-8
     KE_psd[clean] = np.nan
 
@@ -279,7 +280,7 @@ def wave_components_with_strain(ctd, ladcp, strain,\
                                 wl_min, wl_max, detrend=False)
 
     # Total Kinetic Energy
-    Etotal = (KE + PE) * 1025 # Multiply by density to get Joules
+    Etotal = (KE + PE) # Multiply by density to get Joules
 
     # wave components
     f = np.nanmean(gsw.f(lat))
@@ -302,6 +303,7 @@ def wave_components_with_strain(ctd, ladcp, strain,\
     kh[mask]= np.nan
     lambdaH = 1e-3*(2*np.pi)/kh
 
+    # Random plots (only run if youre feeling brave)
     if plots:
         plt.figure()
         plt.subplot(211)
