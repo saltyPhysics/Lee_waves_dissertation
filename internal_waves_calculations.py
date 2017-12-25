@@ -16,12 +16,12 @@ import data_load
 import gsw
 import oceans as oc
 
+
 def reset_test():
     """
     This loads the data for testing the functions
     (its also all the data for the project)
     """
-
 
     ladcp, ctd, bathy = data_load.load_data()
     rho_neutral =  np.genfromtxt('neutral_rho.csv', delimiter=',')
@@ -48,13 +48,12 @@ def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False, detrend='constant'):
 
     """
 
-    mgrid, Psd = sig.periodogram(data, fs=1/dz, axis=axis,\
-                                 nfft=len(data), detrend=detrend,\
+    mgrid, Psd = sig.periodogram(data, fs=1/dz, axis=axis,
+                                 nfft=len(data), detrend=detrend,
                                  window='hanning', scaling='density')
 
     # Integration limits set by minimum and maximum vertical wavelength
     int_limit = np.logical_and(mgrid <= (1)/wlmin, mgrid >= (1)/wlmax)
-
 
     # Integrate between set limits
     variance = np.trapz(Psd[int_limit], x=mgrid[int_limit])
@@ -65,9 +64,8 @@ def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False, detrend='constant'):
         return variance
 
 
-
-def PE_isopycnal(N2, z, rho, strain, wl_min, wl_max,\
-                     bin_idx, window=400, detrend=False):
+def PE_isopycnal(N2, z, rho, strain, wl_min, wl_max,
+                 bin_idx, window=400, detrend=False):
     """
     Calculate internal wave potential energy based on isopycnal displacements
     and using neutral densities. (optional to do this) The function should work
@@ -155,18 +153,17 @@ def PE_strain(N2, z, strain, wl_min, wl_max, bin_idx, detrend='constant'):
 
     """
     # Assumes that strain is the gradient version of isopycnal displacements
-    dz = np.nanmean(diff(z, axis=0))
+    dz = np.nanmean(np.diff(z, axis=0))
     m = (2*np.pi)/(np.nanmean([wl_max, wl_min]))
     eta = (strain/m)
     eta_psd = []
 
-
     # Use periodogram and integrate between target wavelengths
-    eta1 = np.full((bin_idx.shape[0],eta.shape[1]), np.nan)
+    eta1 = np.full((bin_idx.shape[0], eta.shape[1]), np.nan)
     for k, cast in enumerate(eta.T):
         for i, binIn in enumerate(bin_idx):
-            eta1[i,k], f_grid, psd = PowerDens(cast[binIn], dz, wl_max,\
-                                                wl_min, grid=True,detrend=detrend)
+            eta1[i, k], f_grid, psd = PowerDens(cast[binIn], dz, wl_max,
+                                            wl_min, grid=True, detrend=detrend)
             eta_psd.append(psd)
 
     eta_psd = np.vstack(eta_psd)
@@ -175,15 +172,13 @@ def PE_strain(N2, z, strain, wl_min, wl_max, bin_idx, detrend='constant'):
     # Calculate mean Buoyancy Frequency for each bin
     N2mean = []
     for binIn in bin_idx:
-        N2mean.append(np.nanmean(N2[binIn,:], axis=0))
+        N2mean.append(np.nanmean(N2[binIn, :], axis=0))
 
     N2mean = np.vstack(N2mean)
-
 
     PE = 0.5*eta1*N2mean
 
     return PE, f_grid, eta_psd, N2mean
-
 
 
 def KE_UV(U, V, z, bin_idx, wl_min, wl_max, detrend=False):
@@ -195,7 +190,7 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, detrend=False):
 
     Upoly = []
     for cast in U.T:
-        fitrev = oc.vert_polyFit(cast, z[:,0], 100, deg=1)
+        fitrev = oc.vert_polyFit(cast, z[:, 0], 100, deg=1)
         Upoly.append(fitrev)
 
     Upoly = np.vstack(Upoly).T
@@ -204,7 +199,7 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, detrend=False):
     Vpoly = []
 
     for cast in V.T:
-        fitrev = oc.vert_polyFit(cast, z[:,0], 100, deg=1)
+        fitrev = oc.vert_polyFit(cast, z[:, 0], 100, deg=1)
         Vpoly.append(fitrev)
 
     Vpoly = np.vstack(Vpoly).T
@@ -251,21 +246,20 @@ def wave_components_with_strain(ctd, ladcp, strain,\
     CT = gsw.CT_from_t(SA, T, p_ctd)
     N2, dump = gsw.stability.Nsquared(SA, CT, p_ctd, lat)
 
-
     maxDepth = 4000
-    idx_ladcp = p_ladcp[:,-1] <= maxDepth
-    idx_ctd = p_ctd[:,-1] <= maxDepth
+    idx_ladcp = p_ladcp[:, -1] <= maxDepth
+    idx_ctd = p_ctd[:, -1] <= maxDepth
 
     strain = strain[idx_ctd, :]
     S = S[idx_ctd,:]
-    p_ctd = p_ctd[idx_ctd,:]
+    p_ctd = p_ctd[idx_ctd, :]
     U = U[idx_ladcp, :]
     V = V[idx_ladcp, :]
-    p_ladcp = p_ladcp[idx_ladcp,:]
+    p_ladcp = p_ladcp[idx_ladcp, :]
     # Bin CTD data
-    ctd_bins = oc.binData(S, p_ctd[:,0], ctd_bin_size)
+    ctd_bins = oc.binData(S, p_ctd[:, 0], ctd_bin_size)
     # Bin Ladcp Data
-    ladcp_bins = oc.binData(U, p_ladcp[:,0], ladcp_bin_size)
+    ladcp_bins = oc.binData(U, p_ladcp[:, 0], ladcp_bin_size)
 
     # Depth and lat/long grids
     depths = np.vstack([np.nanmean(p_ctd[binIn]) for binIn in ctd_bins])
@@ -276,11 +270,13 @@ def wave_components_with_strain(ctd, ladcp, strain,\
 
     # Calculate Potential Energy
     z = -1*gsw.z_from_p(p_ctd, lat)
-    PE, PE_grid, eta_psd, N2mean = PE_strain(N2, z, strain, wl_min, wl_max, ctd_bins)
+    PE, PE_grid, eta_psd, N2mean = PE_strain(N2, z, strain,\
+                                             wl_min, wl_max, ctd_bins)
 
     # Calculate Kinetic Energy
     z = -1*gsw.z_from_p(p_ladcp, lat)
-    KE, KE_grid, KE_psd = KE_UV(U, V, z, ladcp_bins, wl_min, wl_max, detrend=False)
+    KE, KE_grid, KE_psd = KE_UV(U, V, z, ladcp_bins,
+                                wl_min, wl_max, detrend=False)
 
     # Total Kinetic Energy
     Etotal = (KE + PE) * 1025 # Multiply by density to get Joules
@@ -309,10 +305,24 @@ def wave_components_with_strain(ctd, ladcp, strain,\
     if plots:
         plt.figure()
         plt.subplot(211)
-        plt.loglog(KE_grid, KE_psd.T)
+        plt.loglog(KE_grid, KE_psd.T, linewidth=.5)
         plt.subplot(212)
         plt.loglog(PE_grid, .5*np.nanmean(N2)*eta_psd.T)
 
+        plt.figure()
+        Kemax = np.nanmax(KE_psd, axis=1)
+        kespots = np.nanargmax(KE_psd, axis=1)
+        ax = plt.gca()
+        ax.scatter(KE_grid[kespots],Kemax , c='blue', alpha=0.3, edgecolors='none')
+        ax.set_yscale('log')
+        ax.set_xscale('log')
+
+        Kemax = np.nanmax(.5*np.nanmean(N2)*eta_psd.T, axis=1)
+        kespots = np.nanargmax(.5*np.nanmean(N2)*eta_psd.T, axis=1)
+        ax = plt.gca()
+        ax.scatter(PE_grid[kespots],Kemax , c='red', alpha=0.3, edgecolors='none')
+        ax.set_yscale('log')
+        ax.set_xscale('log')
     if save_data:
 
         file2save = pd.DataFrame(lambdaH)
@@ -353,6 +363,14 @@ def doppler_shifts(kh, ladcp, avg=1000, bin_size = 512):
     dshift = np.vstack(dshift).T
 
     return dshift
+
+
+def energyFlux(kh, m, KE, PE, N2, U, V):
+    """
+    Calculates the energy flux of an internal wave
+    """
+
+
 
 def momentumFluxes(kh, m, N2,ladcp, z_ctd, bin_size=512, h0=1000):
     """
