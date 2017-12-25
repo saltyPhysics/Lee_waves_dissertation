@@ -46,6 +46,15 @@ coverage.xml
 *.cover
 .hypothesis/
 
+# Data files
+*.mat
+*.xlsx
+*.csv
+*.txt
+*.m
+*.png
+
+
 # Translations
 *.mo
 *.pot
