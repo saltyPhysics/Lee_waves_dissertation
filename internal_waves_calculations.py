@@ -11,19 +11,17 @@ This toolbox calculates internal wave properties
 
 import numpy as np
 import scipy.signal as sig
-import scipy
-import seawater as sw
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import data_load
 import gsw
-import cmocean
 import oceans as oc
-#import IW_functions as iw
-import pandas as pd
-from itertools import zip_longest, count
 
 def reset_test():
+    """
+    This loads the data for testing the functions
+    (its also all the data for the project)
+    """
+
 
     ladcp, ctd, bathy = data_load.load_data()
     rho_neutral =  np.genfromtxt('neutral_rho.csv', delimiter=',')
