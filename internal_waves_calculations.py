@@ -277,7 +277,6 @@ def wave_components_with_strain(ctd, ladcp, strain,
     S, T, p_ctd, lat, lon = oc.loadCTD(ctd)
     SA = gsw.SA_from_SP(S, p_ctd, lon, lat)
     CT = gsw.CT_from_t(SA, T, p_ctd)
-    rho = oc.rhoFromCTD(S, T, p_ctd, lon, lat)
     N2, dump = gsw.stability.Nsquared(SA, CT, p_ctd, lat)
 
     maxDepth = 4000
@@ -286,10 +285,12 @@ def wave_components_with_strain(ctd, ladcp, strain,
 
     strain = strain[idx_ctd, :]
     S = S[idx_ctd,:]
+    T = T[idx_ctd,:]
     p_ctd = p_ctd[idx_ctd, :]
     U = U[idx_ladcp, :]
     V = V[idx_ladcp, :]
     p_ladcp = p_ladcp[idx_ladcp, :]
+    rho = oc.rhoFromCTD(S, T, p_ctd, lon, lat)
     # Bin CTD data
     ctd_bins = oc.binData(S, p_ctd[:, 0], ctd_bin_size)
     # Bin Ladcp Data
@@ -300,18 +301,6 @@ def wave_components_with_strain(ctd, ladcp, strain,
     dist = gsw.distance(lon, lat)
     dist = np.cumsum(dist)/1000
     dist = np.append(0,dist)
-
-    # Buoyancy Perturbations b = (-g*rho/rho0)
-    b = (-g*rho)/rho0
-    b_poly = []
-
-    for cast in b.T:
-        fitrev = oc.vert_polyFit(cast, z[:, 0], 100, deg=1)
-        b_poly.append(fitrev)
-
-    b_poly = np.vstack(b_poly).T
-    b_prime = b - b_poly
-
 
 
     # Calculate Potential Energy
@@ -400,12 +389,19 @@ def wave_components_with_strain(ctd, ladcp, strain,
 
     # Random plots (only run if youre feeling brave)
     if plots:
-        plt.figure()
-        plt.subplot(211)
-        plt.loglog(KE_grid, KE_psd.T, linewidth=.5)
-        plt.subplot(212)
-        plt.loglog(PE_grid, .5*np.nanmean(N2)*eta_psd.T)
-
+        plt.figure(figsize=[12,6])
+        plt.subplot(121)
+        plt.loglog(KE_grid, KE_psd.T, linewidth=.6, c='b', alpha=.1)
+        plt.loglog(KE_grid, np.nanmean(KE_psd, axis=0).T, lw=1.5, c='k')
+        plt.ylabel('Kinetic Energy Density')
+        plt.xlabel('Vertical Wavenumber')
+        plt.gca().grid(True, which="both", color='k', linestyle='dotted', linewidth=.2)
+        plt.subplot(122)
+        plt.loglog(PE_grid, .5*np.nanmean(N2)*eta_psd.T, lw=.6, c='b', alpha=.1)
+        plt.loglog(KE_grid, .5*np.nanmean(N2)*np.nanmean(eta_psd, axis=0).T, lw=1.5, c='k')
+        plt.gca().grid(True, which="both", color='k', linestyle='dotted', linewidth=.2)
+        plt.ylabel('Potential Energy Density')
+        plt.xlabel('Vertical Wavenumber')
 
         plt.figure()
         Kemax = np.nanmax(KE_psd, axis=1)
@@ -415,11 +411,13 @@ def wave_components_with_strain(ctd, ladcp, strain,
         ax.set_yscale('log')
         ax.set_xscale('log')
 
-        plt.figure()
-        plt.subplot(211)
+        plt.figure(figsize=[12,6])
+        plt.subplot(121)
         plt.semilogx(u_f, ub.T, linewidth=.5, alpha=.5)
-        plt.subplot(212)
+        plt.gca().grid(True, which="both", color='k', linestyle='dotted', linewidth=.2)
+        plt.subplot(122)
         plt.semilogx(v_f, vb.T, linewidth=.5)
+        plt.gca().grid(True, which="both", color='k', linestyle='dotted', linewidth=.2)
 #        plt.xlim([10**(-2.5), 10**(-2)])
 
         plt.figure()
