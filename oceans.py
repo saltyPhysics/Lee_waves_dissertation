@@ -93,9 +93,21 @@ def rhoFromCTD(S, T, p, lon, lat):
 
     SA = gsw.SA_from_SP(S, p, lon, lat)
     CT = gsw.CT_from_t(SA, T, p)
+    rho = gsw.density.rho(SA, CT, p)
+
+    return rho
+
+def sigma0FromCTD(S, T, p, lon, lat):
+    """
+    Rho from measured salinity and temperature values
+    """
+
+    SA = gsw.SA_from_SP(S, p, lon, lat)
+    CT = gsw.CT_from_t(SA, T, p)
     rho = gsw.density.sigma0(SA, CT)
 
     return rho
+
 
 
 def gswN2(S, T, p, lat, lon, axis=0):
