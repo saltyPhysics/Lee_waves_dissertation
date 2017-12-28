@@ -15,11 +15,12 @@ import matplotlib.pyplot as plt
 import data_load
 import gsw
 import oceans as oc
-
+from scipy import interpolate
 
 default_params = {
         'nfft': 2048,
-        'plots': True}
+        'plots': True,
+        'rho0': 1025}
 
 def reset_test():
     """
@@ -73,7 +74,7 @@ def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False, nfft=None, detrend='co
         return variance
 
 
-def PE_isopycnal(N2, z, rho, strain, wl_min, wl_max,
+def PE_isopycnal(N2, z, b, wl_min, wl_max,
                  bin_idx, window=400, detrend=False):
     """
     Calculate internal wave potential energy based on isopycnal displacements
@@ -257,10 +258,11 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=150, nfft=2048, detrend=False):
     return KE, f_grid, KE_psd, U, V
 
 def wave_components_with_strain(ctd, ladcp, strain,
-                         ctd_bin_size=1024, ladcp_bin_size=1024,
-                         wl_min=300, wl_max=1000,
-                         nfft=default_params['nfft'],
-                         plots=default_params['plots']):
+                                rho0=default_params['rho0'],
+                                ctd_bin_size=1024, ladcp_bin_size=1024,
+                                wl_min=300, wl_max=1000,
+                                nfft=default_params['nfft'],
+                                plots=default_params['plots']):
 
     """
     Calculating Internal Wave Energy
@@ -270,10 +272,12 @@ def wave_components_with_strain(ctd, ladcp, strain,
     """
 
     # Load Hydrographic Data
+    g = 9.8
     U, V, p_ladcp = oc.loadLADCP(ladcp)
     S, T, p_ctd, lat, lon = oc.loadCTD(ctd)
     SA = gsw.SA_from_SP(S, p_ctd, lon, lat)
     CT = gsw.CT_from_t(SA, T, p_ctd)
+    rho = oc.rhoFromCTD(S, T, p_ctd, lon, lat)
     N2, dump = gsw.stability.Nsquared(SA, CT, p_ctd, lat)
 
     maxDepth = 4000
@@ -298,6 +302,15 @@ def wave_components_with_strain(ctd, ladcp, strain,
     dist = np.append(0,dist)
 
     # Buoyancy Perturbations b = (-g*rho/rho0)
+    b = (-g*rho)/rho0
+    b_poly = []
+
+    for cast in b.T:
+        fitrev = oc.vert_polyFit(cast, z[:, 0], 100, deg=1)
+        b_poly.append(fitrev)
+
+    b_poly = np.vstack(b_poly).T
+    b_prime = b - b_poly
 
 
 
@@ -338,6 +351,51 @@ def wave_components_with_strain(ctd, ladcp, strain,
     # Get coherence of u'b' and v'b' and use to estimate horizontal wavenumber
     # components. This uses the previously binned data but now regrids velocity
     # onto the density grid so there are the same number of grid points
+    b = (-g*rho)/rho0
+    b_poly = []
+    z = -1*gsw.z_from_p(p_ctd, lat)
+    fs = 1/np.nanmean(np.diff(z, axis=0))
+    for cast in b.T:
+        fitrev = oc.vert_polyFit(cast, z[:, 0], 100, deg=1)
+        b_poly.append(fitrev)
+
+    b_poly = np.vstack(b_poly).T
+    b_prime = b - b_poly
+
+    dz = 1/fs  # This is the vertical spacing between measurements in metres.
+    lc = wl_min-50  # This is the cut off vertical scale in metres, the filter will remove variability smaller than this.
+    mc = 1./lc  # Cut off wavenumber.
+    normal_cutoff = mc*dz*2.  # Nyquist frequency is half 1/dz.
+    a1, a2 = sig.butter(4, normal_cutoff, btype='lowpass')  # This specifies you use a lowpass butterworth filter of order 4, you can use something else if you want
+    for i in range(b_prime.shape[1]):
+        mask = ~np.isnan(b_prime[:,i])
+        b_prime[mask,i] = sig.filtfilt(a1, a2, b_prime[mask,i])
+
+#    ub = np.empty([ctd_bins.shape[0], int(nfft/2 +1)])
+#    vb = np.empty([ctd_bins.shape[0], int(nfft/2 +1)])
+    ub = []
+    vb = []
+
+    for i in range(ctd_bins.shape[0]):
+
+        Uf = interpolate.interp1d(p_ladcp[ladcp_bins[i,:]].squeeze(),
+                                        Uprime[ladcp_bins[i, :], :],
+                                        axis=0, fill_value='extrapolate')
+
+        Vf = interpolate.interp1d(p_ladcp[ladcp_bins[i,:]].squeeze(),
+                                        Vprime[ladcp_bins[i, :], :],
+                                        axis=0, fill_value='extrapolate')
+        new_z = p_ctd[ctd_bins[i,:],0]
+        u_f, ub_i = sig.coherence(b_prime[ctd_bins[i,:],:],
+                                   Uf(new_z), nfft=nfft, fs=fs, axis=0)
+        v_f, vb_i = sig.coherence(b_prime[ctd_bins[i,:],:],
+                                   Vf(new_z), nfft=nfft, fs=fs, axis=0)
+
+        ub.append(ub_i)
+        vb.append(vb_i)
+
+    ub = np.hstack(ub).T
+    vb = np.hstack(vb).T
 
 
     # Random plots (only run if youre feeling brave)
@@ -348,6 +406,7 @@ def wave_components_with_strain(ctd, ladcp, strain,
         plt.subplot(212)
         plt.loglog(PE_grid, .5*np.nanmean(N2)*eta_psd.T)
 
+
         plt.figure()
         Kemax = np.nanmax(KE_psd, axis=1)
         kespots = np.nanargmax(KE_psd, axis=1)
@@ -355,6 +414,21 @@ def wave_components_with_strain(ctd, ladcp, strain,
         ax.scatter(KE_grid[kespots],Kemax , c='blue', alpha=0.3, edgecolors='none')
         ax.set_yscale('log')
         ax.set_xscale('log')
+
+        plt.figure()
+        plt.subplot(211)
+        plt.semilogx(u_f, ub.T, linewidth=.5, alpha=.5)
+        plt.subplot(212)
+        plt.semilogx(v_f, vb.T, linewidth=.5)
+#        plt.xlim([10**(-2.5), 10**(-2)])
+
+        plt.figure()
+        ub_max = np.nanmax(ub, axis=1)
+        kespots = np.argmax(ub, axis=1)
+        ax = plt.gca()
+        ax.scatter(u_f[kespots],ub_max , c='blue', alpha=0.3, edgecolors='none')
+        ax.set_xscale('log')
+        ax.set_xlim([1e-3, 1e-5])
 
         Kemax = np.nanmax(.5*np.nanmean(N2)*eta_psd.T, axis=1)
         kespots = np.nanargmax(.5*np.nanmean(N2)*eta_psd.T, axis=1)
