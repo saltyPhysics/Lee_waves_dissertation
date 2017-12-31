@@ -16,7 +16,7 @@ import data_load
 import gsw
 import oceans as oc
 from scipy import interpolate
-
+import cmocean
 default_params = {
         'nfft': 2048,
         'plots': True,
@@ -32,15 +32,16 @@ def reset_test():
 #    rho_neutral =  np.genfromtxt('neutral_rho.csv', delimiter=',')
     strain = np.genfromtxt('strain.csv', delimiter=',')
 #    N2 = np.genfromtxt('ref_N2.csv', delimiter=',')
-    wl_max = 1000
-    wl_min = 300
+    wl_max = 1500
+    wl_min = 500
     ctd_bin_size = 1024
     ladcp_bin_size = 1024
     nfft = 2048
 
     return ladcp, ctd, strain, wl_max, wl_min, ctd_bin_size, ladcp_bin_size, nfft
 
-def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False, nfft=None, detrend='constant'):
+def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False,
+              nfft=None, detrend='constant'):
     """
     Using periodogram function to estimate power spectral density
 
@@ -68,8 +69,12 @@ def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False, nfft=None, detrend='co
     # Integrate between set limits
     variance = np.trapz(Psd[int_limit], x=mgrid[int_limit])
 
+    # find wavelength of max energy density
+    idx = np.argmax(Psd)
+    peaks = mgrid[idx]
+
     if grid:
-        return variance, mgrid, Psd
+        return variance, mgrid, Psd, peaks
     else:
         return variance
 
@@ -145,7 +150,7 @@ def PE_isopycnal(N2, z, b, wl_min, wl_max,
 
     N2mean = np.vstack(N2mean)
 
-    PE = 0.5*N2mean*eta1
+    PE = 1027*0.5*N2mean*eta1
 
     return PE, f_grid, eta_psd, N2mean
 
@@ -170,11 +175,13 @@ def PE_strain(N2, z, strain, wl_min, wl_max, bin_idx, nfft=2048, detrend='consta
 
     # Use periodogram and integrate between target wavelengths
     eta1 = np.full((bin_idx.shape[0], eta.shape[1]), np.nan)
+    peaks = []
     for k, cast in enumerate(eta.T):
         for i, binIn in enumerate(bin_idx):
-            eta1[i, k], f_grid, psd = PowerDens(cast[binIn], dz, wl_max,
+            eta1[i, k], f_grid, psd, peaks_i = PowerDens(cast[binIn], dz, wl_max,
                                             wl_min, grid=True, nfft=nfft, detrend=detrend)
             eta_psd.append(psd)
+            peaks.append(peaks_i)
 
     eta_psd = np.vstack(eta_psd)
 
@@ -193,10 +200,10 @@ def PE_strain(N2, z, strain, wl_min, wl_max, bin_idx, nfft=2048, detrend='consta
 
     PE = 0.5*1027*eta1*N2mean
 
-    return PE, f_grid, eta_psd, N2mean
+    return PE, f_grid, eta_psd, N2mean2, np.vstack(peaks)
 
 
-def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=150, nfft=2048, detrend=False):
+def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=150, nfft=2048, detrend='constant'):
     """
 
     Internal wave kinetic energy
@@ -235,19 +242,21 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=150, nfft=2048, detrend=False):
         V[mask,i] = sig.filtfilt(a1, a2, V[mask,i])
     dz = np.nanmean(np.gradient(z, axis=0))
     KE_psd = []
-
+    peaks = []
     # Use periodogram and integrate between target wavelengths
     Pu = np.full((bin_idx.shape[0],U.shape[1]), np.nan)
     Pv = np.full((bin_idx.shape[0],U.shape[1]), np.nan)
     for k, (Ui, Vi) in enumerate(zip(U.T, V.T)):
         for i, binIn in enumerate(bin_idx):
-            Pu[i,k], f_grid, psd = PowerDens(Ui[binIn], dz, wl_max,
+            Pu[i,k], f_grid, psd, u_peaks = PowerDens(Ui[binIn], dz, wl_max,
                                       wl_min, grid=True, nfft=nfft, detrend=detrend)
-            Pv[i,k], f_grid, psd1 = PowerDens(Ui[binIn], dz, wl_max,
+            Pv[i,k], f_grid, psd1, v_peaks = PowerDens(Vi[binIn], dz, wl_max,
                                       wl_min, grid=True, nfft=nfft, detrend=detrend)
             KE_psd.append(.5*1027*(psd + psd1))
+            peaks.append([u_peaks, v_peaks])
 
     KE_psd = np.vstack(KE_psd)
+
 
 
     # New Version
@@ -255,14 +264,34 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=150, nfft=2048, detrend=False):
     clean  = KE_psd < 1e-8
     KE_psd[clean] = np.nan
 
-    return KE, f_grid, KE_psd, U, V
+    return KE, f_grid, KE_psd, U, V, np.vstack(peaks)
+
+def momentumFlux(kh, m, N2mean, f):
+    """
+    Calculating internal wave momentum fluxes (N22f 2)a2
+    """
+    a = kh/m
+
+    cgz = (a**2)*(N2mean - f)/(m*((1+a**2)**1.5)*(f**2 + a*N2mean)**.5)
+
+    Ev = Etotal*cgz
+
+    plt.figure()
+    plt.contourf(Ev)
+    plt.contour(m, color='k')
+    plt.gca().invert_yaxis()
+
+
+
+
+
 
 def wave_components_with_strain(ctd, ladcp, strain,
                                 rho0=default_params['rho0'],
                                 ctd_bin_size=1024, ladcp_bin_size=1024,
                                 wl_min=300, wl_max=1000,
                                 nfft=default_params['nfft'],
-                                plots=default_params['plots']):
+                                plots=default_params['plots'], save_data=False):
 
     """
     Calculating Internal Wave Energy
@@ -305,13 +334,14 @@ def wave_components_with_strain(ctd, ladcp, strain,
 
     # Calculate Potential Energy
     z = -1*gsw.z_from_p(p_ctd, lat)
-    PE, PE_grid, eta_psd, N2mean = PE_strain(N2, z, strain,
+    PE, PE_grid, eta_psd, N2mean, pe_peaks = PE_strain(N2, z, strain,
                                              wl_min, wl_max, ctd_bins, nfft=2048)
 
     # Calculate Kinetic Energy
     z = -1*gsw.z_from_p(p_ladcp, lat)
-    KE, KE_grid, KE_psd, Uprime, Vprime = KE_UV(U, V, z, ladcp_bins,
-                                wl_min, wl_max, lc=wl_min-50, nfft=2048, detrend=False)
+    KE, KE_grid, KE_psd, Uprime, Vprime, ke_peaks = KE_UV(U, V, z, ladcp_bins,
+                                wl_min, wl_max, lc=wl_min-50,
+                                nfft=2048, detrend='constant')
 
     # Total Kinetic Energy
     Etotal = (KE + PE) # Multiply by density to get Joules
@@ -326,7 +356,11 @@ def wave_components_with_strain(ctd, ladcp, strain,
     omega2 = np.abs((f**2)*((KE+PE)/(KE-PE)))
     rw = KE/PE
     w0 = ((f**2)*((rw+1)/(rw-1)))
-    m = (2*np.pi)/np.mean((wl_min, wl_max))
+#    m = (2*np.pi)/np.mean((wl_min, wl_max))
+    m = np.nanmean(ke_peaks, axis=1)
+    m = ke_peaks[:,0]
+    m = m.reshape(omega.shape)
+    m = (2*np.pi)*m
 
     # version 1 kh calculation
     khi = m*np.sqrt(((f**2 - omega**2)/(omega**2 - N2mean)))
@@ -388,17 +422,39 @@ def wave_components_with_strain(ctd, ladcp, strain,
 
 
     # Random plots (only run if youre feeling brave)
+    m_plot = np.array([(2*np.pi)/wl_max,
+                       (2*np.pi)/wl_max, (2*np.pi)/wl_min,
+                       (2*np.pi)/wl_min])
+
     if plots:
         plt.figure(figsize=[12,6])
         plt.subplot(121)
         plt.loglog(KE_grid, KE_psd.T, linewidth=.6, c='b', alpha=.1)
         plt.loglog(KE_grid, np.nanmean(KE_psd, axis=0).T, lw=1.5, c='k')
+        ylims = plt.gca().get_ylim()
+        ylim1 = np.array([ylims[0], ylims[1]])
+        plt.plot(m_plot[2:], ylim1, lw=1,
+                 c='k', alpha=.5,
+                 linestyle='dotted')
+        plt.plot(m_plot[:2], ylim1, lw=1,
+                 c='k', alpha=.5,
+                 linestyle='dotted')
+        plt.ylim(ylims)
         plt.ylabel('Kinetic Energy Density')
         plt.xlabel('Vertical Wavenumber')
         plt.gca().grid(True, which="both", color='k', linestyle='dotted', linewidth=.2)
         plt.subplot(122)
-        plt.loglog(PE_grid, .5*np.nanmean(N2)*eta_psd.T, lw=.6, c='b', alpha=.1)
-        plt.loglog(KE_grid, .5*np.nanmean(N2)*np.nanmean(eta_psd, axis=0).T, lw=1.5, c='k')
+        plt.loglog(PE_grid, .5*np.nanmean(N2)*eta_psd.T,
+                   lw=.6, c='b', alpha=.1)
+        plt.loglog(KE_grid, .5*np.nanmean(N2)*np.nanmean(eta_psd, axis=0).T,
+                   lw=1.5, c='k')
+        plt.plot(m_plot[2:], ylim1, lw=1,
+                 c='k', alpha=.5,
+                 linestyle='dotted')
+        plt.plot(m_plot[:2], ylim1, lw=1,
+                 c='k', alpha=.5,
+                 linestyle='dotted')
+        plt.ylim(ylims)
         plt.gca().grid(True, which="both", color='k', linestyle='dotted', linewidth=.2)
         plt.ylabel('Potential Energy Density')
         plt.xlabel('Vertical Wavenumber')
@@ -436,60 +492,79 @@ def wave_components_with_strain(ctd, ladcp, strain,
         ax.set_xscale('log')
 
 
-        plt.figure(figsize=[16,8])
+        # Peaks lots
+        plt.figure()
+        mask = np.isfinite(Etotal)
+        Etotal[~mask]= 0
+        distrev = np.tile(dist, [kh.shape[0],1])
+        depthrev = np.tile(depths, [1, kh.shape[1]])
+        plt.pcolormesh(distrev, depthrev, Etotal, shading='gouraud')
+        plt.gca().invert_yaxis()
 
-        for i in range(lambdaH.shape[1]):
-
-            if i == 0:
-                plt.subplot(2,U.shape[1],i+1)
-                plt.plot(Uprime[:,i], p_ladcp)
-                plt.title(str(i+1))
-                ax = plt.gca()
-                plt.gca().invert_yaxis()
-                ax.spines['right'].set_color(None)
-                plt.setp( ax.get_xticklabels(), visible=False)
-            else:
-                plt.subplot(2,U.shape[1],i+1)
-                plt.plot(Uprime[:,i], p_ladcp)
-                ax = plt.gca()
-                plt.title(str(i+1))
-                plt.gca().invert_yaxis()
-                ax.spines['bottom'].set_color('black')
-                ax.spines['top'].set_color(None)
-                ax.spines['right'].set_color(None)
-                ax.spines['left'].set_color(None)
-                ax.get_yaxis().set_visible(False)
-                plt.setp( ax.get_xticklabels(), visible=False)
+        plt.figure()
+        plt.pcolormesh(dist, p_ladcp.squeeze(),
+                       Uprime, cmap=cmocean.cm.balance,
+                       shading='flat')
+        levels = np.arange(np.nanmin(Etotal), np.nanmax(Etotal)+.5,.05)
+        plt.contour(distrev, depthrev, Etotal)
+        plt.gca().invert_yaxis()
 
 
-        for i in range(lambdaH.shape[1]):
-            if i == 0:
-                plt.subplot(2,U.shape[1],(i+1)+U.shape[1])
-                plt.plot(Vprime[:,i], p_ladcp)
-                plt.title(str(i+1))
-                ax = plt.gca()
-                plt.gca().invert_yaxis()
 
-                ax.spines['right'].set_color(None)
-                plt.setp( ax.get_xticklabels(), visible=False)
-            else:
-                plt.subplot(2,U.shape[1],(i+1)+U.shape[1])
-                plt.plot(Vprime[:,i], p_ladcp)
-                ax = plt.gca()
-                plt.title(str(i+1))
-                plt.gca().invert_yaxis()
-
-                ax.spines['bottom'].set_color('black')
-                ax.spines['top'].set_color(None)
-                ax.spines['right'].set_color(None)
-                ax.spines['left'].set_color(None)
-                ax.get_yaxis().set_visible(False)
-                plt.setp( ax.get_xticklabels(), visible=False)
-
-            plt.suptitle("Velocity Anomalies U'-top, V'-bottom", fontsize=16)
-
-            #plt.savefig('velocity_anomalies.png', bbox_inches='tight')
-
+#        plt.figure(figsize=[16,8])
+#
+#        for i in range(lambdaH.shape[1]):
+#
+#            if i == 0:
+#                plt.subplot(2,U.shape[1],i+1)
+#                plt.plot(Uprime[:,i], p_ladcp)
+#                plt.title(str(i+1))
+#                ax = plt.gca()
+#                plt.gca().invert_yaxis()
+#                ax.spines['right'].set_color(None)
+#                plt.setp( ax.get_xticklabels(), visible=False)
+#            else:
+#                plt.subplot(2,U.shape[1],i+1)
+#                plt.plot(Uprime[:,i], p_ladcp)
+#                ax = plt.gca()
+#                plt.title(str(i+1))
+#                plt.gca().invert_yaxis()
+#                ax.spines['bottom'].set_color('black')
+#                ax.spines['top'].set_color(None)
+#                ax.spines['right'].set_color(None)
+#                ax.spines['left'].set_color(None)
+#                ax.get_yaxis().set_visible(False)
+#                plt.setp( ax.get_xticklabels(), visible=False)
+#
+#
+#        for i in range(lambdaH.shape[1]):
+#            if i == 0:
+#                plt.subplot(2,U.shape[1],(i+1)+U.shape[1])
+#                plt.plot(Vprime[:,i], p_ladcp)
+#                plt.title(str(i+1))
+#                ax = plt.gca()
+#                plt.gca().invert_yaxis()
+#
+#                ax.spines['right'].set_color(None)
+#                plt.setp( ax.get_xticklabels(), visible=False)
+#            else:
+#                plt.subplot(2,U.shape[1],(i+1)+U.shape[1])
+#                plt.plot(Vprime[:,i], p_ladcp)
+#                ax = plt.gca()
+#                plt.title(str(i+1))
+#                plt.gca().invert_yaxis()
+#
+#                ax.spines['bottom'].set_color('black')
+#                ax.spines['top'].set_color(None)
+#                ax.spines['right'].set_color(None)
+#                ax.spines['left'].set_color(None)
+#                ax.get_yaxis().set_visible(False)
+#                plt.setp( ax.get_xticklabels(), visible=False)
+#
+#            plt.suptitle("Velocity Anomalies U'-top, V'-bottom", fontsize=16)
+#
+#            #plt.savefig('velocity_anomalies.png', bbox_inches='tight')
+#
     if save_data:
 
         file2save = pd.DataFrame(lambdaH)
@@ -501,7 +576,7 @@ def wave_components_with_strain(ctd, ladcp, strain,
 
 
 
-    return PE, KE, omega, m, kh, lambdaH, Etotal
+    return PE, KE, omega, m, kh, lambdaH, Etotal, khi
 
 
 
