@@ -11,9 +11,6 @@ NOTES: geostrophy is wrong.. need to go back and try with geopotentials?
 
 @author: manishdevana
 """
-
-
-
 import numpy as np
 import scipy.signal as sig
 import scipy.interpolate as interp
@@ -25,6 +22,9 @@ import data_load
 import gsw
 import cmocean
 from netCDF4 import Dataset
+from matplotlib.collections import LineCollection
+from matplotlib.colors import ListedColormap, BoundaryNorm
+
 
 
 default_params = {
@@ -145,6 +145,26 @@ def bfrq(T, S, z, lat, lon):
     N2 = (g/pdens)*(dpdens/dz)
 
     return N2
+
+def sliding_bins(data, p, bin_size, step=100):
+    """
+    Bin data in sliding vertical bins with a specified overlap
+    """
+
+    dz = np.nanmean(np.gradient(p))
+
+    bin_step = int(np.ceil(bin_size/dz))
+    step = int(np.ceil(step/dz))
+
+    # start point of each bin
+    starts = np.arange(0, data.shape[0], step)
+
+    idx = []
+    for start in starts:
+        if start+bin_step <= data.shape[0]:
+            idx.append(np.arange(start, start+bin_step, dtype=int))
+
+    return np.vstack(idx)
 
 def binData(data, p, bin_size):
     """
@@ -515,6 +535,7 @@ def velocityInLine(U, V, lat, lon):
 
     return X, Ux, Vx
 
+
 def speedAtZ(U, V, z, depth, bin_width=100):
     """
     Extracts mean velocity at depth with average of bin width
@@ -530,6 +551,7 @@ def speedAtZ(U, V, z, depth, bin_width=100):
     Vrev = np.nanmean(Vrev, axis=0)
 
     return Urev, Vrev
+
 
 def adiabatic_level(S, T, z, lon, lat, pref=0, window=400, order=1):
     """
@@ -551,7 +573,7 @@ def adiabatic_level(S, T, z, lon, lat, pref=0, window=400, order=1):
     rho = gsw.pot_rho_t_exact(SA, T, z, pref)
     SV = 1./rho
 
-
+    # Create steps
     steps = int(np.ceil(window/np.nanmean(np.gradient(np.abs(z), axis=0))))
     starts = np.arange(0, SV.shape[0]-steps, steps)
     z = z[:,0]
@@ -561,7 +583,7 @@ def adiabatic_level(S, T, z, lon, lat, pref=0, window=400, order=1):
         rhobar = np.nanmean(rho[i:i+steps,:], axis=0)
         rhobar = np.expand_dims(rhobar, axis=1)
         rhobar = np.tile(rhobar, steps).T
-        poly = np.polyfit(z[i:i+steps], SV[i:i+steps,:], order)
+        poly = np.polyfit(z[i:i+steps], SV[i:i+steps, :], order)
         g = gsw.grav(lat.T, np.nanmean(z[i:i+steps]))
         g = np.tile(g, steps).T
         polyrev = np.expand_dims(poly[0,:], axis=1)
@@ -577,7 +599,38 @@ def adiabatic_level(S, T, z, lon, lat, pref=0, window=400, order=1):
     return N2
 
 
-def geoFlow(S, T, p, lat, lon, plot=False):
+def thorpe_scales(S, T, p, lat, lon, axis=-1):
+    """
+    Thorpe scales simplified for estimating dissipation rates
+
+    Parameters
+    ----------
+    S : Practical Salinity
+    T : Practical Temperature
+    P : Pressure Measurements -- NOT A NORMALIZED PRESSURE GRID
+    lat : Latitude
+    lon : Longitude
+
+    Returns
+    -------
+    thorpe: Thorpe Scale estimated from vertical displacement RMS
+
+    """
+    rho = rhoFromCTD(S, T, p, lat, lon)
+    order = np.argsort(rho, axis=axis)
+
+    displacements = []
+    for i, p_in in enumerate(p):
+        displacements.append(p[order[i]] - p)
+
+    displacements = np.vstack(displacements)
+    thorpe =  np.sqrt(np.mean(displacements**2))
+
+
+    return thorpe
+
+
+def geoflow(S, T, p, lat, lon, plot=False):
     """
     Function for calculating the geostrophic flow for an array of ctd data
     using geopotential heights
@@ -766,10 +819,57 @@ def VectorOverheadPlot_compare(U, V, Ui, Vi, lat, lon, z, depth,\
 
     return fig
 
+def make_segments(x, y):
+    '''
+    Create list of line segments from x and y coordinates, in the correct format for LineCollection:
+    an array of the form   numlines x (points per line) x 2 (x and y) array
+    '''
+
+    points = np.array([x, y]).T.reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+
+    return segments
+
+def colorline(x, y, z=None, cmap=plt.get_cmap('copper'), norm=plt.Normalize(0.0, 1.0), linewidth=3, alpha=1.0):
+    '''
+    Plot a colored line with coordinates x and y
+    Optionally specify colors in the array z
+    Optionally specify a colormap, a norm function and a line width
+    '''
+
+    # Default colors equally spaced on [0,1]:
+    if z is None:
+        z = np.linspace(0.0, 1.0, len(x))
+
+    # Special case if a single number:
+    if not hasattr(z, "__iter__"):  # to check for numerical input -- this is a hack
+        z = np.array([z])
+
+    z = np.asarray(z)
+
+    segments = make_segments(x, y)
+    lc = LineCollection(segments, array=z, cmap=cmap, norm=norm, linewidth=linewidth, alpha=alpha)
+
+    ax = plt.gca()
+    ax.add_collection(lc)
+
+    return lc
 
 
 
 
+def magnify():
+    """
+    Magnifier for interactive tables in Pandas for jupyter notebook
+    """
 
-
-
+    return [dict(selector="th",
+                 props=[("font-size", "12pt")]),
+            dict(selector="td",
+                 props=[('padding', "0em 0em")]),
+            dict(selector="th:hover",
+                 props=[("font-size", "18pt")]),
+            dict(selector="tr:hover td:hover",
+                 props=[('max-width', '200px'),
+                        ('font-size', '18pt')])
+]

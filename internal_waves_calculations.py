@@ -2,10 +2,7 @@
 Created on December 24th 15:44:35 2017
 
 @author: manishdevana
-This toolbox calculates internal wave properties
-
-
-
+This toolbox calculates internal wave properties and energetics
 """
 
 
@@ -20,7 +17,8 @@ import cmocean
 default_params = {
         'nfft': 2048,
         'plots': True,
-        'rho0': 1025}
+        'rho0': 1025
+        }
 
 def reset_test():
     """
@@ -41,19 +39,29 @@ def reset_test():
     return ladcp, ctd, strain, wl_max, wl_min, ctd_bin_size, ladcp_bin_size, nfft
 
 def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False,
-              nfft=None, detrend='constant'):
+              nfft=None, window='hanning', detrend='constant'):
     """
     Using periodogram function to estimate power spectral density
 
-    PARAMETERS:
+    PARAMETERS
+    ----------
     data: data array for input (assumes column wise data (axis=0))
     dz: vertical sampling rate
     wlmax: maximimum vertical wavelength integration limit
     wlmin: minimum vertical wavelength integration limit
+    axis: axis to perform PSD calculations on
+    grid: if True, returns frequency grid
+    nfft: default nfft is length(data) unless specified otherwise
+    window: window function to reduce loss on FFT, default='hanning', refer to
+                scipy docs for other options
+    detrend: detrending options , defaults to 'constant', other option='linear'
 
-    RETURN:
+    RETURN
+    ------
     variance: The integrated psd of the profiles
-
+    mgrid: frequency grid as 1/vertical wavelength
+    Psd: full power spectral density spectrum for input data
+    peaks: Frequency of maximum Power spectral density
 
     """
 
@@ -61,12 +69,12 @@ def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False,
         nfft = len(data)
     mgrid, Psd = sig.periodogram(data, fs=1/dz, axis=axis,
                                  nfft=nfft, detrend=detrend,
-                                 window='hanning', scaling='density')
+                                 window=window, scaling='density')
 
     # Integration limits set by minimum and maximum vertical wavelength
     int_limit = np.logical_and(mgrid <= (1)/wlmin, mgrid >= (1)/wlmax)
 
-    # Integrate between set limits
+    # Integrate between set limits using trapezoid rule
     variance = np.trapz(Psd[int_limit], x=mgrid[int_limit])
 
     # find wavelength of max energy density
@@ -367,9 +375,9 @@ def wave_components_with_strain(ctd, ladcp, strain,
 
     # version 2 kh calculation
     kh = (m/np.sqrt(N2mean))*(np.sqrt(omega2 - f**2))
-    mask = kh == 0
-    kh[mask]= np.nan
-    lambdaH = 1e-3*(2*np.pi)/kh
+    mask = khi == 0
+    khi[mask]= np.nan
+    lambdaH = 1e-3*(2*np.pi)/khi
 
     # Get coherence of u'b' and v'b' and use to estimate horizontal wavenumber
     # components. This uses the previously binned data but now regrids velocity
@@ -394,8 +402,6 @@ def wave_components_with_strain(ctd, ladcp, strain,
         mask = ~np.isnan(b_prime[:,i])
         b_prime[mask,i] = sig.filtfilt(a1, a2, b_prime[mask,i])
 
-#    ub = np.empty([ctd_bins.shape[0], int(nfft/2 +1)])
-#    vb = np.empty([ctd_bins.shape[0], int(nfft/2 +1)])
     ub = []
     vb = []
 
@@ -509,62 +515,6 @@ def wave_components_with_strain(ctd, ladcp, strain,
         plt.contour(distrev, depthrev, Etotal)
         plt.gca().invert_yaxis()
 
-
-
-#        plt.figure(figsize=[16,8])
-#
-#        for i in range(lambdaH.shape[1]):
-#
-#            if i == 0:
-#                plt.subplot(2,U.shape[1],i+1)
-#                plt.plot(Uprime[:,i], p_ladcp)
-#                plt.title(str(i+1))
-#                ax = plt.gca()
-#                plt.gca().invert_yaxis()
-#                ax.spines['right'].set_color(None)
-#                plt.setp( ax.get_xticklabels(), visible=False)
-#            else:
-#                plt.subplot(2,U.shape[1],i+1)
-#                plt.plot(Uprime[:,i], p_ladcp)
-#                ax = plt.gca()
-#                plt.title(str(i+1))
-#                plt.gca().invert_yaxis()
-#                ax.spines['bottom'].set_color('black')
-#                ax.spines['top'].set_color(None)
-#                ax.spines['right'].set_color(None)
-#                ax.spines['left'].set_color(None)
-#                ax.get_yaxis().set_visible(False)
-#                plt.setp( ax.get_xticklabels(), visible=False)
-#
-#
-#        for i in range(lambdaH.shape[1]):
-#            if i == 0:
-#                plt.subplot(2,U.shape[1],(i+1)+U.shape[1])
-#                plt.plot(Vprime[:,i], p_ladcp)
-#                plt.title(str(i+1))
-#                ax = plt.gca()
-#                plt.gca().invert_yaxis()
-#
-#                ax.spines['right'].set_color(None)
-#                plt.setp( ax.get_xticklabels(), visible=False)
-#            else:
-#                plt.subplot(2,U.shape[1],(i+1)+U.shape[1])
-#                plt.plot(Vprime[:,i], p_ladcp)
-#                ax = plt.gca()
-#                plt.title(str(i+1))
-#                plt.gca().invert_yaxis()
-#
-#                ax.spines['bottom'].set_color('black')
-#                ax.spines['top'].set_color(None)
-#                ax.spines['right'].set_color(None)
-#                ax.spines['left'].set_color(None)
-#                ax.get_yaxis().set_visible(False)
-#                plt.setp( ax.get_xticklabels(), visible=False)
-#
-#            plt.suptitle("Velocity Anomalies U'-top, V'-bottom", fontsize=16)
-#
-#            #plt.savefig('velocity_anomalies.png', bbox_inches='tight')
-#
     if save_data:
 
         file2save = pd.DataFrame(lambdaH)
@@ -574,11 +524,43 @@ def wave_components_with_strain(ctd, ladcp, strain,
         file2save.index = np.squeeze(depths)
         file2save.to_excel('E_total.xlsx')
 
+    return PE, KE, omega, m, kh, lambdaH,\
+            Etotal, khi, Uprime, Vprime, b_prime,\
+            ctd_bins, ladcp_bins, KE_grid, PE_grid,\
+            ke_peaks, pe_peaks, dist, depths, KE_psd,\
+            eta_psd, N2, N2mean
+
+def horizontal_azimuth(Uprime, Vprime, dz, wl_min, wl_max, axis=0, nfft=1024):
+    """
+    Attempt to decompose horizontal wave vector
+    Following methods used in Polzin 2007 (internal waves in eddies or something like that)
+    """
+
+    # U'* x b'
+    Uspec = np.fft.fft(Uprime, n=nfft, axis=axis)
+    Vspec = np.fft.fft(Vprime, n=nfft, axis=axis)
+    fs = 1./dz
+    fmin = 0
+    fi = 1/nfft
+    fmax = .5*fs
+    mx = np.linspace(fmin, fmax, num=nfft)
+
+    int_limit = np.logical_and(mx <= (1)/wl_min, mx >= (1)/wl_max)
+    Uspec = np.nanmean(Uspec[int_limit,:], axis=axis)
+    Vspec = np.nanmean(Vspec[int_limit,:], axis=axis)
+
+    theta = []
+    for Uin, Vin in zip(Uspec.T, Vspec.T):
+        u_conj = np.conj(Uin)
+        v_prime = Vin
+        u_prime = Uin
+        v_conj = np.conj(Vin)
+        theta.append(np.arctan(2*np.real((u_conj*v_prime)/(u_conj*u_prime - v_conj*v_prime)))/2)
+
+    theta = np.vstack(theta).T
 
 
-    return PE, KE, omega, m, kh, lambdaH, Etotal, khi
-
-
+    return theta
 
 #
 #def doppler_shifts(kh, ladcp, avg=1000, bin_size = 512):

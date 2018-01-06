@@ -66,13 +66,15 @@ def doppler_shifts(kh, ladcp, avg=1000, bin_size = 512):
 
 
 
-def horizontal_wave_vector_decomposition(Uspec, Vspec):
+def horizontal_wave_vector_decomposition(Uprime, Vprime, axis=1, nfft=1024):
     """
     Attempt to decompose horizontal wave vector
     Following methods used in Polzin 2007 (internal waves in eddies or something like that)
     """
 
     # U'* x b'
+    Uspec = np.fft(Uprime, axis=axis, nfft=nfft)
+    Vspec = np.fft(Vprime, axis=axis, nfft=nfft)
     theta = []
     for Uin, Vin in zip(Uspec, Vspec):
         u_conj = np.conj(Uin[:,1])
