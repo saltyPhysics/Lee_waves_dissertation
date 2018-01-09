@@ -35,8 +35,10 @@ def reset_test():
     ctd_bin_size = 1024
     ladcp_bin_size = 1024
     nfft = 2048
+    U, V, p_ladcp = oc.loadLADCP(ladcp)
+    S, T, p_ctd, lat, lon = oc.loadCTD(ctd)
 
-    return ladcp, ctd, strain, wl_max, wl_min, ctd_bin_size, ladcp_bin_size, nfft
+    return ladcp, ctd, strain,wl_max, wl_min, ctd_bin_size, ladcp_bin_size, nfft, S, T, p_ctd, U, V, p_ladcp, lat, lon
 
 def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False,
               nfft=None, window='hanning', detrend='constant'):
@@ -163,7 +165,112 @@ def PE_isopycnal(N2, z, b, wl_min, wl_max,
     return PE, f_grid, eta_psd, N2mean
 
 
-def PE_strain(N2, z, strain, wl_min, wl_max, bin_idx, nfft=2048, detrend='constant'):
+def strain(N2, p):
+    """
+    Python version of Alex Forryan's strain calculations and uses adiabatic
+    leveling (Bray and Fofonoff 1980-something)
+    """
+
+def potential_energy(S, T, p, lat,
+                     min_w=400,
+                     max_w=1500,
+                     nfft=1024,
+                     axis=0,
+                     window='hanning',
+                     detrend='constant',
+                     with_strain=True):
+    """
+    Calculate internal wave potential energy following waterman et al 2012 and
+    Meyer et al. 2016. isopyncal displacement is calculated using a reference
+    densiity field constructed by adiabtic leveling following Bray and Fofonoff
+    1981. Gives the option to calculate eta directly or calculate strain and
+    integrated between depth intervals (not sure if this is valid but seems to
+    work much better).
+
+    PARAMETERS
+    ----------
+    S: Salinity
+    T: Temperature
+    p: pressure
+    lat: latitude
+    min_w: lower vertical wavelength limit for integration
+    max_w: upper vertical wavelength limit for Integration
+    nfft: number of points in fft calculation (default=length of data)
+    axis: axis to perform calculations default=0
+    window: window function to reduce variance loss in FFT (default='hanning')
+    detrend: detrend method for fft (default='constant')
+    with_strain: option to calculate eta from strain instead of from density
+                    surfaces. (default=True)
+
+    RETURNS
+    -------
+    PE: Potential energy in joules/m^3
+    PE_psd: periodogram used in calculations
+    peaks: wavelenths of max power in periodograms
+    f_grid: frequency grid (inverse vertical wavelengths
+    """
+
+    # Use adiabatic leveling to generate reference fields
+    N2_ref, N2, strain, p_mid = oc.adiabatic_level(S, T, p, lat)
+
+
+def PE(N2, z, eta,
+              wl_min,
+              wl_max,
+              bin_idx,
+              nfft=2048,
+              detrend='linear'):
+    """
+    Calculate internal wave potential energy based on isopycnal displacements
+    and using neutral densities. (optional to do this) The function should work
+    the same with normal density and an accompanying reference density profile.
+
+    update:
+    Right now this uses strain x dz with strain calculated from alex's code on
+    the bray and fofonoff leveling method. it seems to work better than when I
+    do it with my own density calculations (gets crazy numbers)
+
+    """
+    # Assumes that strain is the gradient version of isopycnal displacements
+    dz = np.nanmean(np.diff(z, axis=0))
+    # Use periodogram and integrate between target wavelengths
+    eta1 = np.full((bin_idx.shape[0], eta.shape[1]), np.nan)
+
+    peaks = []
+    eta_psd = []
+
+    for k, cast in enumerate(eta.T):
+        for i, binIn in enumerate(bin_idx):
+            data_in = cast[binIn]
+            mask = np.isfinite(data_in)
+            good = data_in[mask]
+            eta1[i, k], f_grid, psd, peaks_i = PowerDens(good, dz, wl_max,
+                                            wl_min, grid=True, nfft=nfft, detrend=detrend)
+            eta_psd.append(psd)
+            peaks.append(peaks_i)
+
+    eta_psd = np.vstack(eta_psd)
+
+
+    # Calculate mean Buoyancy Frequency for each bin using a mean vertical
+    # buoyancy profile for the entire grid
+    N2ref = np.nanmean(N2, axis=1)
+    N2mean = []
+    for binIn in bin_idx:
+        N2mean.append(np.nanmean(N2ref[binIn], axis=0))
+
+
+
+    N2mean = np.vstack(N2mean)
+    N2mean2 = np.tile(N2mean, [1,N2.shape[1]])
+
+    PE = 0.5 * eta1 * N2mean
+
+    return PE, f_grid, eta_psd, N2mean2, np.vstack(peaks)
+
+def PE_strain(N2, z, strain, wl_min,
+              wl_max, bin_idx, nfft=2048,
+              detrend='constant'):
     """
     Calculate internal wave potential energy based on isopycnal displacements
     and using neutral densities. (optional to do this) The function should work
@@ -178,7 +285,8 @@ def PE_strain(N2, z, strain, wl_min, wl_max, bin_idx, nfft=2048, detrend='consta
     # Assumes that strain is the gradient version of isopycnal displacements
     dz = np.nanmean(np.diff(z, axis=0))
     m = (2*np.pi)/(np.nanmean([wl_max, wl_min]))
-    eta = (strain/m)
+    eta = strain
+#    eta = (strain/m)
     eta_psd = []
 
     # Use periodogram and integrate between target wavelengths
@@ -211,12 +319,13 @@ def PE_strain(N2, z, strain, wl_min, wl_max, bin_idx, nfft=2048, detrend='consta
     return PE, f_grid, eta_psd, N2mean2, np.vstack(peaks)
 
 
-def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=150, nfft=2048, detrend='constant'):
+def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=400, nfft=2048, detrend='constant'):
     """
 
     Internal wave kinetic energy
 
     """
+
 
     # Clean Up velocity data (u' = U - u_bar)
     Upoly = []
@@ -226,6 +335,7 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=150, nfft=2048, detrend='constant
 
     Upoly = np.vstack(Upoly).T
     U = U - Upoly
+
 
     dz = 8  # This is the vertical spacing between measurements in metres.
     lc = lc  # This is the cut off vertical scale in metres, the filter will remove variability smaller than this.
@@ -244,6 +354,7 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=150, nfft=2048, detrend='constant
 
     Vpoly = np.vstack(Vpoly).T
     V = V - Vpoly
+
 
     for i in range(V.shape[1]):
         mask = ~np.isnan(U[:,i])
@@ -268,7 +379,7 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=150, nfft=2048, detrend='constant
 
 
     # New Version
-    KE = 0.5*1027*(Pu + Pv)
+    KE = 0.5*(Pu + Pv)
     clean  = KE_psd < 1e-8
     KE_psd[clean] = np.nan
 
@@ -352,7 +463,7 @@ def wave_components_with_strain(ctd, ladcp, strain,
                                 nfft=2048, detrend='constant')
 
     # Total Kinetic Energy
-    Etotal = (KE + PE) # Multiply by density to get Joules
+    Etotal = 1027*(KE + PE) # Multiply by density to get Joules
 
     # wave components
     f = np.nanmean(gsw.f(lat))

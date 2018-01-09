@@ -12,18 +12,14 @@ NOTES: geostrophy is wrong.. need to go back and try with geopotentials?
 @author: manishdevana
 """
 import numpy as np
-import scipy.signal as sig
+import pandas as pd
 import scipy.interpolate as interp
 import scipy
-import seawater as sw
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import data_load
 import gsw
 import cmocean
 from netCDF4 import Dataset
 from matplotlib.collections import LineCollection
-from matplotlib.colors import ListedColormap, BoundaryNorm
 
 
 
@@ -554,7 +550,9 @@ def speedAtZ(U, V, z, depth, bin_width=100):
 
 
 def adiabatic_level(S, T, p, lat, pref=0,
-                pressure_range=400, order=1, axis=0):
+                pressure_range=400,
+                order=1, axis=0,
+                eta_calc=True):
     """
     Adiabatic Leveling from Bray and Fofonoff (1981) - or at least my best
     attempt at this procedure.
@@ -566,56 +564,168 @@ def adiabatic_level(S, T, p, lat, pref=0,
     CTD and ladcp data are on two different grids so this function uses the finer
     CTD data to generate the regressions which are then used on the pressure grid
 
+    PARAMETERS
+    ----------
+    S: Salinity
+    T: Temperature
+    p: Pressure grid
+    lat: latitude grid
+    pref: reference pressure
+    pressure_range: window of pressure for adiabtic Leveling
+    order: polynomial order for fitting
+    axis: axis to perform calculations on
+    eta_calc: If true, calculates eta via (rho - rho_ref)/(drho_ref/dz) in same
+            windoes as adiabatic leveling calculations
+
+
+    Returns
+    -------
+    N2: Bouyancy Frequency Squared
+    N2_ref: Buoyancy Frequency Squared reference field from adiabtic Leveling
+    p_mid: midpoint pressure grid from N2 calculations
+    strain: strain calculated using N2 (vertical gradient of vertical isopycnal displacement)
+
 
     """
+
     # Pressure window - See Bray and Fofonoff 1981 for details
     plev = pressure_range
 
     # Calculate Buoyancy Frequency using GSW toolbox
-    N2, p_mid = gsw.stability.Nsquared(S, T, p, lat, axis=axis)
+    N2, p_mid = gsw.stability.Nsquared(S, T, p, lat.T, axis=axis)
+
+    # Keeps as rank 2 array making it compatible with casts and arrays
+    if len(N2.shape) < 2:
+        N2 = np.expand_dims(N2, 1)
+        p_mid = np.expand_dims(p_mid, 1)
+        S = np.expand_dims(S, 1)
+        T = np.expand_dims(T, 1)
+        p = np.expand_dims(p, 1)
 
     # Calculate reference N2 Field
-    N2_ref = np.full_like(N2, np.nan)
-    for i in range(len(p_mid)):
+    alpha = np.full((p_mid.shape[0], p_mid.shape[1]), np.nan)
+    g = np.full((p_mid.shape[0], p_mid.shape[1]), np.nan)
+    rho_bar = np.full((p_mid.shape[0], p_mid.shape[1]), np.nan)
+    drho_dz = np.full((p_mid.shape[0], p_mid.shape[1]), np.nan)
+
+
+#    N2_ref = np.full_like(N2, np.nan)
+    for i in range(p_mid.shape[axis]):
         # Bottom and top for window - the max and min of the 2-element array
         # allows windows to run to ends of profile (I think)
-        pmin = np.max([p_mid[i] - 0.5*plev, p[0]])
-        pmax = np.min([p_mid[i] + 0.5*plev, p[-1]])
-        data_in = np.logical_and(p >= p_min, p<= p_max)
 
-        if not np.isempty(data_i ):
+        for k in range(p_mid.shape[1]):
+            p_min = np.max([p_mid[i,k] - 0.5*plev, p[0,k]])
+            p_max = np.min([p_mid[i,k] + 0.5*plev, p[-1,k]])
+            data_in = np.logical_and(p >= p_min, p<= p_max)
+
+            if np.sum(data_in) > 0:
+                p_bar = np.nanmean(p[data_in[:,k],k])
+                t_bar = np.nanmean(T[data_in[:,k],k])
+                s_bar = np.nanmean(S[data_in[:,k],k])
+                rho_bar[i,k] = gsw.density.rho(s_bar, t_bar, p_bar)
+
+                # Potential Temperature referenced to pbar
+                theta = gsw.conversions.pt_from_t(S[data_in[:,k],k],
+                                                  T[data_in[:,k],k],
+                                                  p[data_in[:,k],k],
+                                                  p_bar)
+
+                sv = 1. / gsw.pot_rho_t_exact(S[data_in[:,k],k],
+                                              theta,
+                                              p[data_in[:,k],k],
+                                              p_bar)
+
+
+                # Regress pressure onto de-meaned specific volume and store coefficients
+                P = np.polyfit(p[data_in[:,k],k], sv - np.nanmean(sv), order)
+
+                # Do something with coefficients that I dont understand
+                alpha[i,k] = P[order-1]
+
+                # calculate reference N2 reference field
+                g[i,k] = gsw.grav(lat[k], p_bar)
+
+    # Calculate N2 grid
+    N2_ref = -1e-4 * rho_bar**2 * g**2 * alpha
+
+    # strain calcuations
+    strain = (N2 - N2_ref) / N2_ref
+
+    # Append row of nans onto the top or bottom because computing N2 chops a row
+    p_mid = np.vstack((np.zeros((1, p_mid.shape[1])), p_mid))
+    rho_bar = np.vstack((np.full((1, p_mid.shape[1]), np.nan), rho_bar))
+
+
+    return N2_ref, N2, strain, p_mid, rho_bar
+
+def isopycnal_displacements(rho, rho_ref, p, diff_window=400, axis=0):
+    """
+    Compute vertical isopycnal displacements
+    (eta) as (rho - rho_ref)/(drho_ref/dz) with drho_ref/dz computed over a
+    vertical window (diff_window)
+
+    Parameters
+    ----------
+    rho: density (nd-array)
+    rho_ref: reference density (see adiabatic leveling for computing ref rho)
+    p: pressure array
+    diff_window: vertical window for computing drho_ref/dz
+    axis: axis of vertical direction
+
+    Returns
+    -------
+    eta: vertical isopycnal displacements
+
+
+    """
+
+    win = diff_window
+    flip = False
+
+    # makes the vertical be along dimension 0 if not already
+    if axis == 1:
+        rho = rho.T
+        rho_ref = rho_ref.T
+        p = p.T
+        flip = True
+
+    elif axis > 1:
+        raise ValueError('Only handles 2-D Arrays')
+
+    eta = np.full_like(rho, np.nan)
+    pvec = np.array(p[:,0], dtype=float)
+
+    # add dimmension checks otherwise conversions might not work
+    z = gsw.z_from_p(p, lat.T)
+
+    step = int(np.floor(.5*win/np.nanmean(diff(pvec))))
+
+    mask = np.isfinite(rho_ref)
+
+    # mask_r = rho_ref > 213113
+    # rho_ref[mask_r] = np.nan
+    rho_ref[~mask] = np.nan
+
+
+    for i in range(rho.shape[0]-1):
+        # Depth level of reference grid
 
 
 
-    # Calculate Specific Volume
-    SA = gsw.SA_from_SP(S, z, lon, lat)
-    rho = gsw.pot_rho_t_exact(SA, T, z, pref)
-    SV = 1./rho
+        # Find difference in depth from rho to rho ref depth.
+        for k in range(rho.shape[1]):
 
-    # Create steps
-    steps = int(np.ceil(window/np.nanmean(np.gradient(np.abs(z), axis=0))))
-    starts = np.arange(0, SV.shape[0]-steps, steps)
-    z = z[:,0]
+            if np.isfinite(rho[i,k]):
 
-    N2 = []
-    for i in starts:
-        rhobar = np.nanmean(rho[i:i+steps,:], axis=0)
-        rhobar = np.expand_dims(rhobar, axis=1)
-        rhobar = np.tile(rhobar, steps).T
-        poly = np.polyfit(z[i:i+steps], SV[i:i+steps, :], order)
-        g = gsw.grav(lat.T, np.nanmean(z[i:i+steps]))
-        g = np.tile(g, steps).T
-        polyrev = np.expand_dims(poly[0,:], axis=1)
-        polyrev = np.tile(polyrev, steps).T
-        N2.append(1e-4*(g**2)*(rhobar**2)*polyrev)
+                idx = np.argmin(np.abs(rho[i,k] - rho_ref[:,k]))
 
-    N2 = np.vstack(N2)
+                eta[i,k] = z[idx,k] - z[i,k]
 
-    padding = np.full((SV.shape[0]-N2.shape[0], N2.shape[1]), np.nan)
+        # This should get you eta in meters (vertical displacement)
 
-    N2 = np.concatenate((N2, padding))
 
-    return N2
+    return eta
 
 
 def thorpe_scales(S, T, p, lat, lon, axis=-1):
@@ -875,7 +985,18 @@ def colorline(x, y, z=None, cmap=plt.get_cmap('copper'), norm=plt.Normalize(0.0,
     return lc
 
 
+def display(array, cmap=None, caption='', precision=5):
+    """
+    Function for quick displaying tables in a jupyter notebook
+    """
 
+    disp = pd.DataFrame(array, columns=np.arange(1, array.shape[1] + 1))
+    disp.style.background_gradient(cmap=cmap, axis=1)\
+        .set_properties(**{'max-width': '300px', 'font-size': '12pt'})\
+        .set_caption(caption)\
+        .set_precision(precision)
+
+    return disp
 
 def magnify():
     """

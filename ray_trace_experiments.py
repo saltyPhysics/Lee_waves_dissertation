@@ -38,7 +38,7 @@ def load():
      khi, Uprime, Vprime, b_prime, ctd_bins,\
      ladcp_bins, KE_grid, PE_grid, ke_peaks,\
      pe_peaks, dist, depths, KE_psd, eta_psd, N2, N2mean = iwc.wave_components_with_strain(ctd,\
-     ladcp, strain, wl_min=wl_min, wl_max=wl_max, plots=False)
+     ladcp, eta, wl_min=wl_min, wl_max=wl_max, plots=False)
 
 
 def plots():
