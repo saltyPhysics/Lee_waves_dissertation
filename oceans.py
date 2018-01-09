@@ -553,7 +553,8 @@ def speedAtZ(U, V, z, depth, bin_width=100):
     return Urev, Vrev
 
 
-def adiabatic_level(S, T, z, lon, lat, pref=0, window=400, order=1):
+def adiabatic_level(S, T, p, lat, pref=0,
+                pressure_range=400, order=1, axis=0):
     """
     Adiabatic Leveling from Bray and Fofonoff (1981) - or at least my best
     attempt at this procedure.
@@ -567,6 +568,24 @@ def adiabatic_level(S, T, z, lon, lat, pref=0, window=400, order=1):
 
 
     """
+    # Pressure window - See Bray and Fofonoff 1981 for details
+    plev = pressure_range
+
+    # Calculate Buoyancy Frequency using GSW toolbox
+    N2, p_mid = gsw.stability.Nsquared(S, T, p, lat, axis=axis)
+
+    # Calculate reference N2 Field
+    N2_ref = np.full_like(N2, np.nan)
+    for i in range(len(p_mid)):
+        # Bottom and top for window - the max and min of the 2-element array
+        # allows windows to run to ends of profile (I think)
+        pmin = np.max([p_mid[i] - 0.5*plev, p[0]])
+        pmax = np.min([p_mid[i] + 0.5*plev, p[-1]])
+        data_in = np.logical_and(p >= p_min, p<= p_max)
+
+        if not np.isempty(data_i ):
+
+
 
     # Calculate Specific Volume
     SA = gsw.SA_from_SP(S, z, lon, lat)
