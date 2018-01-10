@@ -165,12 +165,6 @@ def PE_isopycnal(N2, z, b, wl_min, wl_max,
     return PE, f_grid, eta_psd, N2mean
 
 
-def strain(N2, p):
-    """
-    Python version of Alex Forryan's strain calculations and uses adiabatic
-    leveling (Bray and Fofonoff 1980-something)
-    """
-
 def potential_energy(S, T, p, lat,
                      min_w=400,
                      max_w=1500,
