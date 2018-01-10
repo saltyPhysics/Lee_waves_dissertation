@@ -21,20 +21,18 @@ import cmocean
 from netCDF4 import Dataset
 from matplotlib.collections import LineCollection
 
-
-
 default_params = {
-        'bin_size':200,
-        'overlap':100,
-        'm_0': 1./300., # 1/lamda limits
-        'm_c': 1./10., #  1/lamda limits
-        'order': 1,
-        'nfft':256,
-        'plot_data': 'on',
-        'transect_fig_size': (6,4),
-        'reference pressure': 0,
-        'plot_check_adiabatic': False,
-        'plot_spectrums': False,
+    'bin_size': 200,
+    'overlap': 100,
+    'm_0': 1. / 300.,  # 1/lamda limits
+    'm_c': 1. / 10.,  # 1/lamda limits
+    'order': 1,
+    'nfft': 256,
+    'plot_data': 'on',
+    'transect_fig_size': (6, 4),
+    'reference pressure': 0,
+    'plot_check_adiabatic': False,
+    'plot_spectrums': False,
         }
 
 def loadCTD(ctd):
@@ -550,9 +548,9 @@ def speedAtZ(U, V, z, depth, bin_width=100):
 
 
 def adiabatic_level(S, T, p, lat, pref=0,
-                pressure_range=400,
-                order=1, axis=0,
-                eta_calc=True):
+                    pressure_range=400,
+                    order=1, axis=0,
+                    eta_calc=True):
     """
     Adiabatic Leveling from Bray and Fofonoff (1981) - or at least my best
     attempt at this procedure.
@@ -592,7 +590,7 @@ def adiabatic_level(S, T, p, lat, pref=0,
     plev = pressure_range
 
     # Calculate Buoyancy Frequency using GSW toolbox
-    N2, p_mid = gsw.stability.Nsquared(S, T, p, lat.T, axis=axis)
+    N2, p_mid = gsw.stability.Nsquared(S, T, p, lat, axis=axis)
 
     # Keeps as rank 2 array making it compatible with casts and arrays
     if len(N2.shape) < 2:
@@ -636,17 +634,16 @@ def adiabatic_level(S, T, p, lat, pref=0,
                                               p[data_in[:,k],k],
                                               p_bar)
 
-
                 # Regress pressure onto de-meaned specific volume and store coefficients
-                P = np.polyfit(p[data_in[:,k],k], sv - np.nanmean(sv), order)
+                Poly = np.polyfit(p[data_in[:, k], k], sv - np.nanmean(sv), order)
 
                 # Do something with coefficients that I dont understand
-                alpha[i,k] = P[order-1]
+                alpha[i, k] = Poly[order - 1]
 
                 # calculate reference N2 reference field
-                g[i,k] = gsw.grav(lat[k], p_bar)
+                g[i, k] = gsw.grav(lat.T[k], p_bar)
 
-    # Calculate N2 grid
+    # Calculate N2 grid (10^-4 to convert from db to pascals)
     N2_ref = -1e-4 * rho_bar**2 * g**2 * alpha
 
     # strain calcuations
@@ -656,10 +653,10 @@ def adiabatic_level(S, T, p, lat, pref=0,
     p_mid = np.vstack((np.zeros((1, p_mid.shape[1])), p_mid))
     rho_bar = np.vstack((np.full((1, p_mid.shape[1]), np.nan), rho_bar))
 
-
     return N2_ref, N2, strain, p_mid, rho_bar
 
-def isopycnal_displacements(rho, rho_ref, p, diff_window=400, axis=0):
+
+def isopycnal_displacements(rho, rho_ref, p, lat, diff_window=400, axis=0):
     """
     Compute vertical isopycnal displacements
     (eta) as (rho - rho_ref)/(drho_ref/dz) with drho_ref/dz computed over a
@@ -693,37 +690,29 @@ def isopycnal_displacements(rho, rho_ref, p, diff_window=400, axis=0):
     elif axis > 1:
         raise ValueError('Only handles 2-D Arrays')
 
+    z = -1 * gsw.z_from_p(p[:, 0], lat[:, 0])
+    dz = np.nanmean(np.diff(z))
+    step = int(np.floor(.5 * win / dz))
     eta = np.full_like(rho, np.nan)
-    pvec = np.array(p[:,0], dtype=float)
+    for i in range(rho.shape[0]):
 
-    # add dimmension checks otherwise conversions might not work
-    z = gsw.z_from_p(p, lat.T)
+        # If in the TOP half of the profile the window needs to be adjusted
+        if i - step < 0:
+            lower = 0
+            upper = int(2 * step)
 
-    step = int(np.floor(.5*win/np.nanmean(diff(pvec))))
+        # If in the BOTTOM half of the profile the window needs to be adjusted
+        elif i + step > (rho.shape[0] - 1):
+            lower = int(rho.shape[0] - 2*step)
+            upper = -1
 
-    mask = np.isfinite(rho_ref)
+        else:
+            upper = i + step
+            lower = i - step
 
-    # mask_r = rho_ref > 213113
-    # rho_ref[mask_r] = np.nan
-    rho_ref[~mask] = np.nan
+        drefdz = (rho_ref[upper] - rho_ref[lower])/win
 
-
-    for i in range(rho.shape[0]-1):
-        # Depth level of reference grid
-
-
-
-        # Find difference in depth from rho to rho ref depth.
-        for k in range(rho.shape[1]):
-
-            if np.isfinite(rho[i,k]):
-
-                idx = np.argmin(np.abs(rho[i,k] - rho_ref[:,k]))
-
-                eta[i,k] = z[idx,k] - z[i,k]
-
-        # This should get you eta in meters (vertical displacement)
-
+        eta[i, :] = (rho[i, :] - rho_ref[i]) / drefdz
 
     return eta
 
@@ -985,15 +974,15 @@ def colorline(x, y, z=None, cmap=plt.get_cmap('copper'), norm=plt.Normalize(0.0,
     return lc
 
 
-def display(array, cmap=None, caption='', precision=5):
+def display(array, cmap=None, index=None, caption=' ', precision=5):
     """
     Function for quick displaying tables in a jupyter notebook
     """
 
-    disp = pd.DataFrame(array, columns=np.arange(1, array.shape[1] + 1))
+    disp = pd.DataFrame(array, index=index, columns=np.arange(1, array.shape[1] + 1))
     disp.style.background_gradient(cmap=cmap, axis=1)\
         .set_properties(**{'max-width': '300px', 'font-size': '12pt'})\
-        .set_caption(caption)\
+        .set_caption('buts')\
         .set_precision(precision)
 
     return disp
