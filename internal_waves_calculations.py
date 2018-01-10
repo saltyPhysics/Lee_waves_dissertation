@@ -40,6 +40,7 @@ def reset_test():
 
     return ladcp, ctd, strain,wl_max, wl_min, ctd_bin_size, ladcp_bin_size, nfft, S, T, p_ctd, U, V, p_ladcp, lat, lon
 
+
 def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False,
               nfft=None, window='hanning', detrend='constant'):
     """
@@ -74,7 +75,7 @@ def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False,
                                  window=window, scaling='density')
 
     # Integration limits set by minimum and maximum vertical wavelength
-    int_limit = np.logical_and(mgrid <= (1)/wlmin, mgrid >= (1)/wlmax)
+    int_limit = np.logical_and(mgrid <= (1) / wlmin, mgrid >= (1) / wlmax)
 
     # Integrate between set limits using trapezoid rule
     variance = np.trapz(Psd[int_limit], x=mgrid[int_limit])
