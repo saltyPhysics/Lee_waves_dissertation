@@ -53,6 +53,8 @@ coverage.xml
 *.txt
 *.m
 *.png
+*.csl
+*.bib
 
 
 # Translations
