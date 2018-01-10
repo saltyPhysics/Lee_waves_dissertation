@@ -361,11 +361,11 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=400, nfft=2048, detrend='constant
     Pv = np.full((bin_idx.shape[0],U.shape[1]), np.nan)
     for k, (Ui, Vi) in enumerate(zip(U.T, V.T)):
         for i, binIn in enumerate(bin_idx):
-            Pu[i,k], f_grid, psd, u_peaks = PowerDens(Ui[binIn], dz, wl_max,
+            Pu[i, k], f_grid, psd, u_peaks = PowerDens(Ui[binIn], dz, wl_max,
                                       wl_min, grid=True, nfft=nfft, detrend=detrend)
-            Pv[i,k], f_grid, psd1, v_peaks = PowerDens(Vi[binIn], dz, wl_max,
+            Pv[i, k], f_grid, psd1, v_peaks = PowerDens(Vi[binIn], dz, wl_max,
                                       wl_min, grid=True, nfft=nfft, detrend=detrend)
-            KE_psd.append(.5*1027*(psd + psd1))
+            KE_psd.append(.5 * (psd + psd1))
             peaks.append([u_peaks, v_peaks])
 
     KE_psd = np.vstack(KE_psd)

@@ -177,7 +177,7 @@ m = {}
 
     def back3d(self, duration=24, tstep=5,
                     steady_state=True, status=2, seafloor=4000,
-                    print_run_report=False, updates=True):
+                    print_run_report=False, updates=False):
         """
         Time forward 2d modelliing
         """
