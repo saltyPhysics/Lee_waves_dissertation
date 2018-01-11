@@ -42,6 +42,7 @@ def cgz(w0, f, kh, m):
     """
     return np.squeeze((((w0**2 - f**2))/(w0*(kh**2 + m**2)))*m)
 
+
 def cgx(N2, w0, k, kh, m):
     """
     Horizontal group speed in x-direction
@@ -54,6 +55,7 @@ def cgy(N2, w0, l, kh, m):
     Horizontal group speed in y-direction
     """
     return np.squeeze(((N2 - w0**2)/(w0*(kh**2 + m**2)))*l)
+
 
 
 
