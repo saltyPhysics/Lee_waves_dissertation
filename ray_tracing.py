@@ -5,6 +5,8 @@ Date: December 31, 2017
 Ray Tracing functions for internal waves
 
 The goal is to use an object oriented approach to a ray tracing model.
+CURRETN STATUS:
+
 """
 
 
