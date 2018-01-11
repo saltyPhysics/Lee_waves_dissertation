@@ -27,9 +27,6 @@ def reset_test():
     """
 
     ladcp, ctd = data_load.load_data()
-#    rho_neutral =  np.genfromtxt('neutral_rho.csv', delimiter=',')
-    strain = np.genfromtxt('strain.csv', delimiter=',')
-#    N2 = np.genfromtxt('ref_N2.csv', delimiter=',')
     wl_max = 1500
     wl_min = 500
     ctd_bin_size = 1024
@@ -69,7 +66,7 @@ def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False,
     """
 
     if not nfft:
-        nfft = len(data)
+        nfft = len(data) 
     mgrid, Psd = sig.periodogram(data, fs=1/dz, axis=axis,
                                  nfft=nfft, detrend=detrend,
                                  window=window, scaling='density')
@@ -206,7 +203,28 @@ def PE(N2, z, eta,
 def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=400, nfft=2048, detrend='constant'):
     """
 
-    Calculates internal wave energy with bins. 
+    Calculates internal wave  kinetic energy which has been binned
+
+    Parameters
+    ----------
+    U: Zonal velocities
+    V: Meridional velocities
+    z: corresponding depth grid 
+    bin_idx: indices for bins - must following oceans.py binning procedure to work here 
+    wl_min: lower limit of integration by vertical wavelength
+    wl_max:  upper wavelength limit of integration
+    lc = cut off wavelength for low pass filtering (filer signals with high frequencies)
+    nfft: number of points in FFT
+    detrend: type of detrending: 'linear', 'constant', or None
+
+    Returns
+    -------
+    KE: Kinetic energy array with size (# of bins, # of stations)
+    f_grid: frequency (inverse wavelength) grid used in psd calculations
+    KE_psd: periodogram of kinetic energy
+    U: U prime component of original U
+    V: V prime component of original V
+    peaks: frequency of max energy density for each bin. 
 
     """
 
@@ -272,6 +290,7 @@ def KE_UV(U, V, z, bin_idx, wl_min, wl_max, lc=400, nfft=2048, detrend='constant
 def momentumFlux(kh, m, N2mean, f):
     """
     Calculating internal wave momentum fluxes (N22f 2)a2
+    FINISH THIS
     """
     a = kh/m
 
@@ -302,6 +321,8 @@ def wave_components_with_strain(ctd, ladcp, strain,
     Internal wave energy calcuations following methods in waterman et al 2012.
 
     """
+    
+
 
     # Load Hydrographic Data
     g = 9.8
@@ -556,79 +577,3 @@ def horizontal_azimuth(Uprime, Vprime, dz, wl_min, wl_max, axis=0, nfft=1024):
 
 
     return theta
-
-#
-#def doppler_shifts(kh, ladcp, avg=1000, bin_size = 512):
-#    """
-#    Doppler shift the internal frequency to test for lee waves
-#    using the depth averaged floww
-#    """
-#    U, V, p_ladcp = oc.loadLADCP(ladcp)
-#    maxDepth = 4000
-#    idx_ladcp = p_ladcp[:,-1] <= maxDepth
-#    dz = int(np.nanmean(np.gradient(p_ladcp, axis=0)))
-#    window = int(np.ceil(avg/dz))
-#    Ubar = []
-#    for u, v in zip(U.T, V.T):
-#        mask = np.isfinite(u)
-#        u = u[mask]
-#        v = v[mask]
-#        u = np.nanmean(u[-window:])
-#        v = np.nanmean(v[-window:])
-#        Ubar.append(np.sqrt(u**2 + v**2))
-#
-#    Ubar = np.vstack(Ubar)
-#    dshift = []
-#    for cast, ubar in zip(kh.T, Ubar):
-#        dshift.append(cast*ubar)
-#
-#    dshift = np.vstack(dshift).T
-#
-#    return dshift
-#
-#
-#def energyFlux(kh, m, KE, PE, N2, U, V):
-#    """
-#    Calculates the energy flux of an internal wave
-#    """
-#
-#
-#
-#def momentumFluxes(kh, m, N2,ladcp, z_ctd, bin_size=512, h0=1000):
-#    """
-#    Calculating vertical and horizontal momentum fluxes of internal waves within
-#    safe range
-#    """
-#
-#    dshift = doppler_shifts(kh, ladcp)
-#
-#    # Test whether K*U is between N and f
-#    f = (np.nanmean(gsw.f(lat)))
-#
-#    dshiftTest = np.full_like(kh, np.nan)
-#
-#    for i, dump in enumerate(kh.T):
-#        N2mean = np.nanmean(N2[:,i])
-#        dshiftTest[:,i] = np.logical_and(dshift[:,i]**2 >= f**2, dshift[:,i]**2<= N2mean)
-#
-#    dshiftTest2 = dshiftTest == 0
-#    kh[dshiftTest2] = np.nan
-#
-#    maxDepth = 4000
-#    idx_ladcp = z[:,-1] <= maxDepth
-#    idx_ctd = z_ctd[:,-1] <= maxDepth
-#    z = z[idx_ladcp,:]
-#    U = U[idx_ladcp,:]
-#    V = V[idx_ladcp,:]
-#    rho = rho_neutral[idx_ctd,:]
-#    bins = oc.binData(U, z[:,0], bin_size)
-#    Umean = np.vstack([np.nanmean(U[binIn,:], axis=0) for binIn in bins])
-#    Vmean = np.vstack([np.nanmean(V[binIn,:], axis=0) for binIn in bins])
-#    Umag = np.sqrt(Umean**2 + Vmean**2)
-#
-#    bins = oc.binData(rho, z_ctd[:,0], bin_size)
-#    rho0 = np.vstack([np.nanmean(rho[binIn,:], axis=0) for binIn in bins])
-#
-#
-#
-#    tau = .5*kh*rho0*Umag*np.sqrt((N2/Umag**2)-kh**2)
