@@ -100,22 +100,7 @@ class wave(object):
     - plotting and saving rays
     - HOPEFULLY: built in gui
     """
-    lat = 55.0
-    N2 = np.genfromtxt('ref_N2_b.txt')
-    N2_grid = np.squeeze(np.genfromtxt('N2_pgrid.csv',delimiter=','))
-    flow = np.genfromtxt('flow.txt')
-    U = flow[:,0]
-    V = flow[:,1]
-    flow_grid = np.genfromtxt('flow_grid.txt')
 
-    U = oc.vert_polyFit2(U, flow_grid, 100, deg=2)
-    V = oc.vert_polyFit2(V, flow_grid, 100, deg=2)
-
-    dudz = np.gradient(U)/np.gradient(flow_grid)
-    dudz = oc.vert_polyFit2(dudz, flow_grid, 100, deg=2)
-
-    dvdz = np.gradient(V)/np.gradient(flow_grid)
-    dvdz = oc.vert_polyFit2(dvdz, flow_grid, 100, deg=2)
     # Add functionality for a default Buoyancy Frequncy and Velocity Profile
 
     def __init__(self, k=10*1000, l=10*1000, m=500, w0=8e-4, z0=500):
@@ -132,14 +117,6 @@ class wave(object):
         self.y_init = np.array([0], dtype='float')
         self.z_init = np.array([z0], dtype='float')
 
-    def add_all_fields(self, U, V, N2, rho):
-        """
-        Allows user to add buoyancy, velocity, and density fields
-        """
-        self.U = U
-        self.V = V
-        self.N2 = N2
-        self.rho = rho
 
     def help(self):
         """
@@ -183,21 +160,9 @@ m = {}
 
         print(txt)
 
-    def forward2d(steady_state=True):
-        """
-        Time forward 2d modelling with option for steady state or time evolving
-        fields.
-        """
 
 
-    def back2d():
-        """
-        Time reverese 2d modelling
-        """
-
-
-
-    def back3d(self, duration=24, tstep=5,
+    def trace_back(self, duration=24, tstep=5,
                     steady_state=True, status=2, seafloor=4000,
                     print_run_report=False, updates=False):
         """
@@ -315,70 +280,7 @@ self.z_ray[-1], duration, tstep, bottom)
             steady_state = False
             self.seafloor = seafloor
 
-    def plot(self, fig=None):
-        """
-        Plot the current ray trace results
-        """
-
-        if not fig:
-            plt.figure(figsize=[6,6])
-        else:
-            plt.figure(fig.number)
-
-        plt.plot(np.sqrt(self.x_ray**2 + self.y_ray**2), self.z_ray)
-        plt.gca().invert_yaxis()
-        plt.show()
-
-    def plot_flow_x(self, fig=None):
-
-
-        if not fig:
-            plt.figure(figsize=[6,6])
-        else:
-            plt.figure(fig.number)
-
-        plt.plot(self.x_ray, self.z_ray)
-
-        plt.xlim(self.x_ray.min(), self.x_ray.max())
-        plt.ylim(0, self.seafloor)
-        plt.gca().invert_yaxis()
-
-    def x_m_plot(self, fig=None, contour=True,
-                 cmap='reds', linenorm=None,
-                 line_colorbar=False):
-
-
-        if not fig:
-            plt.figure(figsize=[6,6])
-        else:
-            plt.figure(fig.number)
-
-        if contour:
-            _, Ugrid = np.meshgrid(self.x_ray, self.U)
-            cp = plt.contourf(self.x_ray.flatten(),
-                              self.flow_grid, Ugrid,
-                              cmap=cmocean.cm.speed)
-            cb1 = plt.colorbar(cp)
-
-        axs = plt.gca()
-        if linenorm:
-            linenorm = plt.Normalize(np.nanmin(self.m_ray),
-                             np.nanmax(self.m_ray))
-
-
-
-        self.lc = oc.colorline(self.x_ray.flatten(),
-                          self.z_ray.flatten(),
-                          z=np.abs(self.m_ray.flatten()),
-                          norm=linenorm, cmap=cmap)
-        plt.xlim(self.x_ray.min(), self.x_ray.max())
-        plt.ylim(0, self.seafloor)
-        if line_colorbar:
-
-            cb2 = plt.colorbar(self.lc, extend='max')
-
-        plt.gca().invert_yaxis()
-
+  
     def backward3d(self, duration=24, tstep=5, steady_state=True,status=2,
                    seafloor=4000, print_run_report=False, updates=False):
         """
@@ -528,22 +430,10 @@ self.z_ray[-1], duration, tstep, bottom)
 
 
 
-    def satgem_back(self, duration=48, tstep=5):
-        """
-        Run model using satGEM velocity and buoyancy fields. 
+
         
-        Integration of satGEM fields allows for full 4 dimensional analysis
-        so all parameters can vary in space and time in realistic local 
-        conditions. 
-        """
         
-
-
-    def save_run(self, fname=None):
-
-        if not fname:
-            fname = 'ray_trace.csv'
-            np.savetxt(fname)
+        
 
 
 
