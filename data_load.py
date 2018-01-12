@@ -42,7 +42,7 @@ def load_data(bathy=False):
     # since python range doesnt include the last value. Using the loop below, The
     # data for the desired stations are extracted
 
-    station_idx = list(range(41,62))
+    station_idx = list(range(38,62))
 
     for key, value in ctd_dict.items():
         unsorted = ctd_dict[key]

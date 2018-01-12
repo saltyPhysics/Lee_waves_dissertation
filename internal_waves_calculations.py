@@ -35,7 +35,7 @@ def reset_test():
     U, V, p_ladcp = oc.loadLADCP(ladcp)
     S, T, p_ctd, lat, lon = oc.loadCTD(ctd)
 
-    return ladcp, ctd, strain,wl_max, wl_min, ctd_bin_size, ladcp_bin_size, nfft, S, T, p_ctd, U, V, p_ladcp, lat, lon
+    return ladcp, ctd ,wl_max, wl_min, ctd_bin_size, ladcp_bin_size, nfft, S, T, p_ctd, U, V, p_ladcp, lat, lon
 
 
 def PowerDens(data, dz, wlmax, wlmin, axis=0, grid=False,
@@ -577,3 +577,13 @@ def horizontal_azimuth(Uprime, Vprime, dz, wl_min, wl_max, axis=0, nfft=1024):
 
 
     return theta
+
+def horizontal_azimuthv2(u_prime, v_prime, b_prime):
+    """
+    Alternative method for calculating the horizontal azimuth to see if
+    the Polzin method actually works
+    """
+
+
+
+    

@@ -15,3 +15,14 @@ import numpy as np
 import scipy
 import gsw
 import cmocean
+
+import internal_waves_calculations as iwc
+
+# Load Data
+if 'ladcp' not in locals():
+    ladcp, ctd, wl_max, wl_min, ctd_bin_size, ladcp_bin_size,\
+                        nfft, S, T, p_ctd, U, \
+                        V, p_ladcp, lat, lon = iwc.reset_test()
+
+# stitch together up and down casts
+
