@@ -5,7 +5,7 @@ Date: December 31, 2017
 Ray Tracing functions for internal waves
 
 The goal is to use an object oriented approach to a ray tracing model.
-CURRETN STATUS:
+CURRENT STATUS:
 
 """
 
@@ -26,6 +26,15 @@ def instructions():
     """
     Print instructions
     """
+    text = '''
+Ray Tracing Instructions:
+------------------------
+1. Generate a "wave" object : rt.wave(inputs)
+    - enter wave frequency, horizontal and vertical wavenumbner components, and initial depth
+    - view properties to check if things were entered correctly
+    '''
+
+    print(text)
 
 
 def wavenumbers(lam_k, lam_l, lam_m):
@@ -519,7 +528,15 @@ self.z_ray[-1], duration, tstep, bottom)
 
 
 
-
+    def satgem_back(self, duration=48, tstep=5):
+        """
+        Run model using satGEM velocity and buoyancy fields. 
+        
+        Integration of satGEM fields allows for full 4 dimensional analysis
+        so all parameters can vary in space and time in realistic local 
+        conditions. 
+        """
+        
 
 
     def save_run(self, fname=None):
