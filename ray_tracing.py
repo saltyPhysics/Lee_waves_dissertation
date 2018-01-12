@@ -164,9 +164,8 @@ m = {}
     def back_trace(self, duration=24, tstep=5, steady_state=True,status=2,
                    seafloor=4000, print_run_report=False, updates=False):
         """
-        ADD DOCS FOR THIS!!
-        Copy of back3d but with depth varying intrinsic frequency and wave
-        action added.
+        3 dimensional ray tracing within the time evolving satGEM density and velocity fields
+
 
         Parameters
         ----------
@@ -176,6 +175,8 @@ m = {}
         status:
         seafloor:
         
+        Returns
+        -------
 
         """
 
