@@ -45,16 +45,55 @@ satGEM Details
 
     print(text)
 
-
-def wavenumbers(lam_k, lam_l, lam_m):
+def load_satGEM():
     """
-    Returns wavenumbers from wavelengths 
+    Load in satGEM grids using h5py module (speeds this up exponentially compared to fully loading in the arrays)
     """
-    k = (2*np.pi)/lam_k/1000
-    l = (2*np.pi)/lam_l/1000
-    m = (2*np.pi)/lam_m
+    gamma_file = h5py.File('DIMES_GAMMA_09_12_upd.mat')
+    # gamma_variables = list(gamma_file.keys())
+    vel_file = h5py.File('DIMES_vel_09_12_upd.mat')
+    # vel_variables = list(vel_file.keys())
+    TS_file = h5py.File('DIMES_TS_09_12_upd.mat')
+    # TS_variables = list(TS_file.keys())
 
-    return k, l, m
+    # THESE ARE NOT NUMPY ARRAYS THEY ARE H5PY OBJECT BUT BEHAVE SIMILARLY
+    # if there needs t be
+    gamma = gamma_file['satGEM_gamma']
+    u = vel_file['satGEM_east']
+    v = vel_file['satGEM_north']
+    temp = TS_file['satGEM_temp']
+    sal = TS_file['satGEM_sal']
+
+    # Data grids
+    time = gamma_file['time']
+    depth_grid = gamma_file['depthlvl']
+    lon = gamma_file['lons']
+    lat = gamma_file['lats']
+
+    # The u and v grids are one point off each so I need 
+    # to figure out how to handle this. 
+    u_lat = vel_file['centerlat']
+    v_lon = vel_file['centerlon']
+
+
+
+
+
+def locate_point(lat, lon, depth, time):
+    """
+    General function for locating a point within the satGEM grid. This prevents the need to open and acces the grid for each variable and instead utlizes the common indices
+    """
+
+
+    return lon_idx, lat_idx, depth_idx, time_idx
+
+def N2(x, y, z, t):
+    """
+    N2 as a function (x, y, z, t ) taken from the satGEM field
+    """
+    
+
+    return N2
 
 
 def cgz(w0, f, kh, m):
@@ -321,35 +360,41 @@ m = {}
 
 
 
-
-        
-        
-        
-
-
-
-def testing():
+class satGEM(object):
     """
-    This is where I load parameters to test functions
+    load in the satGEM data as an object (this might be wierd though becuase the h5py module loads in each file as an object so not sure...)
+    
+    The objects built in functions can then be used to easily access the data set without ever having to load the whole thing in.
     """
+    
 
-    # These are parameters taken from the lee wave dissertation project
-    l1 =  -0.000139543
-    k1 = 0.000324448
-    m1 = -0.00976433
-    z0 = 1500
-    w0 = -0.000132755
-    wave1 = wave(k=k1, l=l1, m=m1, w0=w0, z0=z0)
+        
+        
 
 
-    # run models
-    duration = 48
-    tstep = 10
-    status = 6 # intervals to give run status
-    wave1.backward3d(duration=duration, tstep=tstep,
-                     status=status, print_run_report=True)
+
+# def testing():
+#     """
+#     This is where I load parameters to test functions
+#     """
+
+#     # These are parameters taken from the lee wave dissertation project
+#     l1 =  -0.000139543
+#     k1 = 0.000324448
+#     m1 = -0.00976433
+#     z0 = 1500
+#     w0 = -0.000132755
+#     wave1 = wave(k=k1, l=l1, m=m1, w0=w0, z0=z0)
 
 
-    plt.figure()
-    plt.plot(wave1.x_ray, wave1.z_ray)
-    plt.gca().invert_yaxis()
+#     # run models
+#     duration = 48
+#     tstep = 10
+#     status = 6 # intervals to give run status
+#     wave1.backward3d(duration=duration, tstep=tstep,
+#                      status=status, print_run_report=True)
+
+
+#     plt.figure()
+#     plt.plot(wave1.x_ray, wave1.z_ray)
+#     plt.gca().invert_yaxis()
