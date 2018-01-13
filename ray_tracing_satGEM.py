@@ -9,6 +9,8 @@ CURRENT STATUS:
 load in satGEM data and rewrite functions to remove all assumptions and run in a 4d field. 
 
 - Figure out how to make k and l and m vary in all 4 dimensions (x,y,z, and t)
+- need a solid conversion method for x and y distances to lat and long (long is the tricker one)
+
 
 
 
@@ -18,13 +20,14 @@ load in satGEM data and rewrite functions to remove all assumptions and run in a
 import numpy as np
 import scipy
 import pandas as pd
-import matplotlib.pyplot as plt
 import gsw
 import oceans as oc
+import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.colors as colors
 import cmocean
+import h5py
 
 
 def instructions():
@@ -45,48 +48,6 @@ satGEM Details
 
     print(text)
 
-def load_satGEM():
-    """
-    Load in satGEM grids using h5py module (speeds this up exponentially compared to fully loading in the arrays)
-    """
-    gamma_file = h5py.File('DIMES_GAMMA_09_12_upd.mat')
-    # gamma_variables = list(gamma_file.keys())
-    vel_file = h5py.File('DIMES_vel_09_12_upd.mat')
-    # vel_variables = list(vel_file.keys())
-    TS_file = h5py.File('DIMES_TS_09_12_upd.mat')
-    # TS_variables = list(TS_file.keys())
-
-    # THESE ARE NOT NUMPY ARRAYS THEY ARE H5PY OBJECT BUT BEHAVE SIMILARLY
-    # if there needs t be
-    gamma = gamma_file['satGEM_gamma']
-    u = vel_file['satGEM_east']
-    v = vel_file['satGEM_north']
-    temp = TS_file['satGEM_temp']
-    sal = TS_file['satGEM_sal']
-
-    # Data grids
-    time = gamma_file['time']
-    depth_grid = gamma_file['depthlvl']
-    lon = gamma_file['lons']
-    lat = gamma_file['lats']
-
-    # The u and v grids are one point off each so I need 
-    # to figure out how to handle this. 
-    u_lat = vel_file['centerlat']
-    v_lon = vel_file['centerlon']
-
-
-
-
-
-def locate_point(lat, lon, depth, time):
-    """
-    General function for locating a point within the satGEM grid. This prevents the need to open and acces the grid for each variable and instead utlizes the common indices
-    """
-
-
-    return lon_idx, lat_idx, depth_idx, time_idx
-
 def N2(x, y, z, t):
     """
     N2 as a function (x, y, z, t ) taken from the satGEM field
@@ -94,6 +55,13 @@ def N2(x, y, z, t):
     
 
     return N2
+
+def omega(x, y , z, t):
+    """
+    Omega as a function of (x, y ,z ,t) from the satGEM field
+    """
+
+    return omega
 
 
 def cgz(w0, f, kh, m):
@@ -366,9 +334,68 @@ class satGEM(object):
     
     The objects built in functions can then be used to easily access the data set without ever having to load the whole thing in.
     """
+
+    def __init__(self):
+        # Load satGEM data as h5py file objects
+        gamma_file = h5py.File('DIMES_GAMMA_09_12_upd.mat')
+        vel_file = h5py.File('DIMES_vel_09_12_upd.mat')
+        ts_file = h5py.File('DIMES_TS_09_12_upd.mat')
+        gamma = gamma_file['satGEM_gamma']
+
+        self.u = vel_file['satGEM_east']
+        self.v = vel_file['satGEM_north']
+        self.temp = ts_file['satGEM_temp']
+        self.sal = ts_file['satGEM_sal']
+
+        # Data grids
+        self.time = gamma_file['time']
+        self.depth_grid = gamma_file['depthlvl']
+        self.lon = gamma_file['lons']
+        self.lat = gamma_file['lats']
+
+        # The u and v grids are one point off each so I need
+        # to figure out how to handle this
+        self.centerlat = vel_file['centerlat']
+        self.centerlon = vel_file['centerlon']
     
 
-        
+    def locate(lon, lat, depth, time):
+        """
+        Locate point/points within the satgem data set
+
+        Parameters
+        ----------
+        lon: longitude of point
+        lat: latitude of point
+        depth: depth of point
+        time: of point
+
+        Returns
+        -------
+        lon_id: index along longitude axis
+        lat_id: index along latitude axis
+        depth_id: index along latitude axis
+        time_id: index along time axis
+
+        These are for the velocity grids
+        centerlon_id: index along centerlon axis
+        centerlat_id: index along centerlat axis
+
+
+        """
+
+        # Add warning for out of time and space boundaries. 
+
+        lon_id = np.argmin(np.abs(self.lon[:] - lon))
+        lat_id = np.argmin(np.abs(self.lat[:] - lat))
+        depth_id = np.argmin(np.abs(self.depth_grid[:] - depth))
+        time_id = np.argmin(np.abs(self.time[:] - time))
+
+        centerlon_id = np.argmin(np.abs(self.centerlon[:] - lon))
+        centerlat_id = np.argmin(np.abs(self.centerlat[:] - lat))
+
+        return lon_id, lat_id, depth_id, time_id, centerlon_id, centerlat_id
+            
         
 
 
