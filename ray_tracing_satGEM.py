@@ -48,6 +48,7 @@ satGEM Details
 
     print(text)
 
+# Wave ray tracing equations
 def N2(x, y, z, t):
     """
     N2 as a function (x, y, z, t ) taken from the satGEM field
@@ -56,29 +57,37 @@ def N2(x, y, z, t):
 
     return N2
 
-def omega(x, y , z, t):
+def intrinsicF(x, y , z, t):
     """
     Omega as a function of (x, y ,z ,t) from the satGEM field
     """
 
-    return omega
+    return omegaI
 
 
-def cgz(w0, f, kh, m):
+def absoluteF(x, y, z, t):
+    """
+    Omega as a function of (x, y ,z ,t) from the satGEM field
+    """
+
+    return omegaF
+
+
+def dzdt(w0, f, kh, m):
     """
     Vertical Group Speed
     """
     return np.squeeze((((w0**2 - f**2))/(w0*(kh**2 + m**2)))*m)
 
 
-def cgx(N2, w0, k, kh, m):
+def dxdt(N2, w0, k, kh, m):
     """
     Horizontal group speed in x-direction
     """
     return np.squeeze(((N2 - w0**2)/(w0*(kh**2 + m**2)))*k)
 
 
-def cgy(N2, w0, l, kh, m):
+def dydt(N2, w0, l, kh, m):
     """
     Horizontal group speed in y-direction
     """
