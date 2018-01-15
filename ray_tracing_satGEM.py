@@ -38,12 +38,12 @@ def instructions():
 Ray Tracing Instructions:
 ------------------------
 1. Generate a "wave" object : rt.wave(inputs)
-    - enter wave frequency, horizontal and vertical wavenumbner components, and initial depth
+    - enter wave frequency, horizontal and vertical wavenumber components, and initial depth
     - view properties to check if things were entered correctly
 
 satGEM Details
 --------------
-\t This ray tracing model utlizes the 4D velocity and density field constructed by Dr. Andrew Meijers. Full details are available in Meijers 2013. 
+\t This ray tracing model utilizes the 4D velocity and density field constructed by Dr. Andrew Meijers. Full details are available in Meijers 2013. 
     '''
 
     print(text)
@@ -57,12 +57,15 @@ def N2(x, y, z, t):
 
     return N2
 
-def intrinsicF(x, y , z, t):
+def wkb_disp(f, N, k, l, m, U, V):
     """
-    Omega as a function of (x, y ,z ,t) from the satGEM field
+    WKB Disperision Relation as a function of N, U, V, and K(k, l, m)
     """
 
-    return omegaI
+    W = 0
+
+
+    return W
 
 
 def absoluteF(x, y, z, t):
@@ -73,23 +76,23 @@ def absoluteF(x, y, z, t):
     return omegaF
 
 
-def dzdt(w0, f, kh, m):
+def CGz(w0, f, kh, m):
     """
     Vertical Group Speed
     """
     return np.squeeze((((w0**2 - f**2))/(w0*(kh**2 + m**2)))*m)
 
 
-def dxdt(N2, w0, k, kh, m):
+def CGx(N2, w0, k, kh, m, U):
     """
-    Horizontal group speed in x-direction
+    Horizontal group speed in x-direction in a flow
     """
     return np.squeeze(((N2 - w0**2)/(w0*(kh**2 + m**2)))*k)
 
 
-def dydt(N2, w0, l, kh, m):
+def CGy(N2, w0, l, kh, m, V):
     """
-    Horizontal group speed in y-direction
+    Horizontal group speed in y-direction in a flow
     """
     return np.squeeze(((N2 - w0**2)/(w0*(kh**2 + m**2)))*l)
 
@@ -102,6 +105,7 @@ def EoZ(N2, w0, f, ):
     Ez = np.squeeze((w0**2 * (N2 - f**2))
                     / ((w0**2 - f**2)**(3 / 2) * (N2 - w0**2)**(1 / 2)))
     return Ez
+
 
 
 def make_segments(x, y):
@@ -194,10 +198,14 @@ m = {}
 
         print(txt)
   
-    def back_trace(self, duration=24, tstep=5,status=2,
+    def back_trace(self, satGEM, duration=24, tstep=5,status=2,
                    seafloor=4000, print_run_report=False, updates=False):
         """
         3 dimensional ray tracing within the time evolving satGEM density and velocity fields
+        
+        - load in the satGEM object when running the model
+        - Structure of integration outlines in ray tracing docs. 
+
 
 
         Parameters
@@ -213,131 +221,10 @@ m = {}
         """
 
         # Set up model run
-        tstep = float(tstep)
-        duration = duration * 60 * 60  # Convert to seconds
-        time = np.arange(0, duration, tstep)  # time grid for model run
-        status = status*60*60
-        f = gsw.f(self.lat)
-
-        # Run model
-        while steady_state:
-
-            z = self.z_init[:]
-            x = self.x_init[:]
-            y = self.y_init[:]
-            w0 = self.w0_init[:]
-            m = self.m_init[:]
-            k = self.k_init[:]
-            l = self.l_init[:]
-            kh = self.kh_init[:]
+        
 
 
-
-            bottom = 'NO'
-            for t in range(len(time)):
-                idx = np.nanargmin(np.abs(z - self.flow_grid))
-                idx2 = np.nanargmin(np.abs(z - self.N2_grid))
-
-                # X group step
-                x = x - (cgx(self.N2[idx2], w0, k,\
-                              kh, m) + self.U[idx])*tstep
-
-
-
-                if not np.isfinite(x):
-                    error = self.model_error_message(x, y, z, m, idx, idx2)
-                    print(' X Error' + error)
-                    break
-                # Y group step
-                y = y - (cgy(self.N2[idx2], w0, l,\
-                              kh, m)+ self.V[idx])*tstep
-
-                if not np.isfinite(y):
-                    error = self.model_error_message(x, y, z, m, idx, idx2)
-                    print(' Y Error' + error)
-                    break
-
-                # Z group step
-                z = z + cgz(w0, f, kh, m)*tstep
-
-                if not np.isfinite(z):
-                    error = self.model_error_message(x, y, z, m, idx, idx2)
-                    print(' X Error' + error)
-                    break
-
-
-                if z >= seafloor:
-                    print('Wave ray hit seafloor')
-                    bottom = 'YES'
-                    break
-
-                # vertical wavenumber change
-                m = m - -1 * (k * self.dudz[idx] + l * self.dvdz[idx]) * tstep
-
-                # Change in frequency (doppler shifting)
-                w0 = w0 - (k * self.U[idx] + l * self.V[idx])
-
-                # Wave Energy(z)
-                Ez = EoZ(self.N2[idx2], w0, f)
-
-                # Wave Action
-                Ac = Ez / w0
-
-                # Sometimes z turns to nan if the velocity or buoyancy profiles
-                # are not complete, right now that breaks the model
-                if not np.isfinite(z):
-                    print('Error')
-                    break
-
-                # Store steps
-                self.x_all.append(x)
-                self.y_all.append(y)
-                self.z_all.append(z)
-                self.m_all.append(m)
-                self.w0_all.append(w0)
-                self.E_all.append(Ez)
-                self.Ac_all.append(Ac)
-
-
-                if time[t] % status == 0 and updates:
-                    print("Progress: {} %".format(int(100
-                                                      * time[t] / duration)))
-
-
-            self.x_ray = np.vstack(self.x_all) / 1000  # Convert to Kilometers
-            self.y_ray = np.vstack(self.y_all) / 1000  # Convert to Kilometers
-
-            self.z_ray = np.vstack(self.z_all)
-            self.m_ray = np.vstack(self.m_all)
-            self.w0_ray = np.vstack(self.w0_all)
-            self.E_ray = np.vstack(self.E_all)
-            self.Ac_ray = np.vstack(self.Ac_all)
-            self.bottom = bottom
-
-            if updates:
-                print('Run Complete!')
-            Run_report = '''
-    Ray Tracing Report:
-    -------------------
-    X-Distance: {} km
-    Y-Distance: {} km
-    Z-Distance: {} m
-    Duration: {} seconds
-    Time Step: {} seconds
-    Hit Sea Floor : {}
-    '''.format(self.x_ray[-1], self.y_ray[-1],
-    self.z_ray[-1], duration, tstep, bottom)
-            self.run_report = Run_report
-
-            if print_run_report:
-                print(Run_report)
-            steady_state = False
-            self.seafloor = seafloor
-
-
-
-
-class satGEM(object):
+class satGEM_field(object):
     """
     load in the satGEM data as an object (this might be wierd though becuase the h5py module loads in each file as an object so not sure...)
     

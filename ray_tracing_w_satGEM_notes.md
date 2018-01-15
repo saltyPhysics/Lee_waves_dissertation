@@ -1,5 +1,6 @@
 ## Ray tracing with satGEM build notes:
 
+        pandoc --variable geometry:margin=2cm -s ray_tracing_w_satGEM_notes.md -o ray_tracing.pdf
 ### Loading satGEM:
 * Since the satGEM files are large (>10 gb), use the h5py python library which loads the files as objects which can be indexed and searched without actually loading the whole file. 
 * all of the satGEM files are loaded into a single object defined in the ray tracing module. This makes accessing the data easier because it is all centralized into that one object without ever having to load the whole data set. 
@@ -20,7 +21,46 @@
 - **These are adapted from the buhler and olbers ray tracing papers to work in 4 dimensions with no assumptions about flow or the density field in time and space**
 
 - Go back and look at the original derivations from the **Gill** book. How the equations used in ray tracing papers starts to make sense when you look at how aspect ratio is substituted into the dispersion relation
-    - When doing this, aspect can be asummed small and negligble compared to m because of the order of magntitude difference between them (validated in my observations) 
+    - When doing this, aspect can be assummed small and negligible compared to m because of the order of magntitude difference between them (validated in my observations) .
     - What happens if I use the full equations without doing this?
-    - what is the fast marching methond and eikonal equation .... Seems super important to solving ray tracing
+    - **what is the fast marching method and eikonal equation .... Seems super important to solving ray tracing**
 
+
+\pagebreak
+
+**SETUP**
+
+#### x, y, and z steps:
+
+$$ \Delta x  = \Delta t \bigg [    + U(x,y,z,t) \bigg ] $$
+
+$$ \Delta y  = \Delta t \bigg [    + V(x,y,z,t) \bigg ] $$
+
+$$ \Delta z  = \Delta t \bigg [     \bigg ] $$
+
+#### Get change in position and new field values:
+
+$$ \Delta longitude  = (\Delta x)(**conversion factor**)  $$
+
+$$ \Delta latitude  = (\Delta y)(111.11 km)  $$
+
+#### Changes in wave parameters:
+
+
+
+$$ \Delta k  =   \Delta t \bigg [  r_x  + k\frac{\partial U}{\partial x} + l\frac{\partial V}{\partial x} \bigg ] $$
+
+$$ \Delta l  =   \Delta t \bigg [  r_y  + k\frac{\partial U}{\partial y} + l\frac{\partial V}{\partial y} \bigg ] $$
+
+$$ \Delta m  =   \Delta t \bigg [  r_z  + k\frac{\partial U}{\partial z} + l\frac{\partial V}{\partial z} \bigg ] $$
+
+
+where $r_{x,y,z}$ is the refraction index:
+
+$$ r = \frac{N(k^2 +l^2)}{m^2 \Omega} \frac{\partial N}{\partial (x,y,z)} $$
+
+#### Wave dispersion relation change
+
+Changes to intrinsic frequency/dispersion relation along the wave ray is equal to the sum of the changes to the wave number components :
+
+$$ \Delta \Omega = \Delta t \bigg [ (r_x + r_y + r_z) + k\Delta U + l\Delta V \bigg ]   $$
