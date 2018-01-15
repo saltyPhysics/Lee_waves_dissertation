@@ -19,5 +19,8 @@
 
 - **These are adapted from the buhler and olbers ray tracing papers to work in 4 dimensions with no assumptions about flow or the density field in time and space**
 
-
+- Go back and look at the original derivations from the **Gill** book. How the equations used in ray tracing papers starts to make sense when you look at how aspect ratio is substituted into the dispersion relation
+    - When doing this, aspect can be asummed small and negligble compared to m because of the order of magntitude difference between them (validated in my observations) 
+    - What happens if I use the full equations without doing this?
+    - what is the fast marching methond and eikonal equation .... Seems super important to solving ray tracing
 
