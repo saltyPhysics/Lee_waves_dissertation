@@ -400,30 +400,3 @@ def run_tracing(wave, satGEM, start_time,
 
     # convert pads into indices
 
-
-
-# def testing():
-#     """
-#     This is where I load parameters to test functions
-#     """
-
-#     # These are parameters taken from the lee wave dissertation project
-#     l1 =  -0.000139543
-#     k1 = 0.000324448
-#     m1 = -0.00976433
-#     z0 = 1500
-#     w0 = -0.000132755
-#     wave1 = wave(k=k1, l=l1, m=m1, w0=w0, z0=z0)
-
-
-#     # run models
-#     duration = 48
-#     tstep = 10
-#     status = 6 # intervals to give run status
-#     wave1.backward3d(duration=duration, tstep=tstep,
-#                      status=status, print_run_report=True)
-
-
-#     plt.figure()
-#     plt.plot(wave1.x_ray, wave1.z_ray)
-#     plt.gca().invert_yaxis()

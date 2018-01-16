@@ -24,7 +24,6 @@ import datetime as dt
 
 
 
-
 default_params = {
     'bin_size': 200,
     'overlap': 100,
