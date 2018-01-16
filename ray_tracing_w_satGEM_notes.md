@@ -32,13 +32,13 @@
 
 #### x, y, and z steps:
 
-$$ \Delta x  = \Delta t \bigg [    + U(x,y,z,t) \bigg ] $$
+$$ \Delta x  = \Delta t \bigg [ \bigg (\frac{N^2 k}{m^2 \Omega} \bigg )  + U(x,y,z,t) \bigg ] $$
 
-$$ \Delta y  = \Delta t \bigg [    + V(x,y,z,t) \bigg ] $$
+$$ \Delta y  = \Delta t \bigg [ \bigg ( \frac{N^2 l}{m^2 \Omega} \bigg ) + V(x,y,z,t) \bigg ] $$
 
-$$ \Delta z  = \Delta t \bigg [     \bigg ] $$
+$$ \Delta z  = \Delta t \bigg [ \frac{N^2(k^2 + l^2)}{m^3 \Omega}   \bigg ] $$
 
-#### Get change in position and new field values:
+#### Get change in position and new field values: _Inverse Haversine Forumala for spherical distance_
 
 $$ \Delta longitude  = (\Delta x)(**conversion factor**)  $$
 
