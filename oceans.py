@@ -20,6 +20,10 @@ import gsw
 import cmocean
 from netCDF4 import Dataset
 from matplotlib.collections import LineCollection
+import datetime as dt
+
+
+
 
 default_params = {
     'bin_size': 200,
@@ -987,6 +991,14 @@ def display(array, cmap=None, index=None, caption=' ', precision=5):
 
     return disp
 
+def matlab2datetime(matlab_datenum):
+    day = dt.datetime.fromordinal(int(matlab_datenum))
+    dayfrac = dt.timedelta(days=matlab_datenum%1) - dt.timedelta(days = 366)
+
+    return day + dayfrac
+
+
+
 def magnify():
     """
     Magnifier for interactive tables in Pandas for jupyter notebook
@@ -1000,5 +1012,4 @@ def magnify():
                  props=[("font-size", "18pt")]),
             dict(selector="tr:hover td:hover",
                  props=[('max-width', '200px'),
-                        ('font-size', '18pt')])
-]
+                        ('font-size', '18pt')])]

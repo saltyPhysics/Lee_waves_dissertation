@@ -24,7 +24,7 @@
     - When doing this, aspect can be assummed small and negligible compared to m because of the order of magntitude difference between them (validated in my observations) .
     - What happens if I use the full equations without doing this?
     - **what is the fast marching method and eikonal equation .... Seems super important to solving ray tracing**
-
+    - When loading grid in for N2, calculations instead of loading the whole box, load in a box (4d) around the rays current location which has enough buffer to make sure the ray doesnt move out of it. Also, add a check to say if the ray is getting close to the edge of the box, re center the box. **(see diagram)**
 
 \pagebreak
 
@@ -42,7 +42,8 @@ $$ \Delta z  = \Delta t \bigg [ \frac{N^2(k^2 + l^2)}{m^3 \Omega}   \bigg ] $$
 
 $$ \Delta longitude  = (\Delta x)(**conversion factor**)  $$
 
-$$ \Delta latitude  = (\Delta y)(111.11 km)  $$
+$$ \Delta latitude  = (\Delta y)(111.11 km)  $$eff
+
 
 #### Changes in wave parameters:
 

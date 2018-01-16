@@ -28,6 +28,11 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.colors as colors
 import cmocean
 import h5py
+from datetime import datetime, timedelta
+
+
+
+
 
 
 def instructions():
@@ -40,6 +45,7 @@ Ray Tracing Instructions:
 1. Generate a "wave" object : rt.wave(inputs)
     - enter wave frequency, horizontal and vertical wavenumber components, and initial depth
     - view properties to check if things were entered correctly
+    - when loading and calculating N2, take chunks out at a time otherwise it will crash. (too big of a file)
 
 satGEM Details
 --------------
@@ -163,7 +169,7 @@ def inverse_hav(x, y, lon1, lat1):
 
 
 
-class wave(object):
+class Wave(object):
     """
     Creates a wave which has varying functionality including:
     - time forward modelling
@@ -175,19 +181,20 @@ class wave(object):
 
     # Add functionality for a default Buoyancy Frequncy and Velocity Profile
 
-    def __init__(self, k=10*1000, l=10*1000, m=500, w0=8e-4, z0=500):
+    def __init__(self, k=10*1000, l=10*1000,
+                 m=500, w0=8e-4, z0=500, lat=-55, lon=-55):
 
         # Convert wavelengths into wavenumbers
         # Save initial values becuase running the model will change
         # the wave features.
-        self.k_init = np.array([k], dtype='float')
-        self.l_init = np.array([l], dtype='float')
-        self.m_init = np.array([m], dtype='float')
-        self.w0_init = np.array([w0], dtype='float')
-        self.kh_init = np.array([np.sqrt(self.k_init**2 + self.l_init**2)])
-        self.x_init = np.array([0], dtype='float')
-        self.y_init = np.array([0], dtype='float')
-        self.z_init = np.array([z0], dtype='float')
+        self.k = np.array([k], dtype='float')
+        self.m = np.array([l], dtype='float')
+        self.l = np.array([m], dtype='float')
+        self.w0 = np.array([w0], dtype='float')
+        self.kh = np.array([np.sqrt(self.k**2 + self.l**2)])
+        self.z0 = np.array([z0], dtype='float')
+        self.lat0 = np.array([lat], dtype='float')
+        self.lon0 = np.array([lon], dtype='float')
 
         # These are empty for now- they get filled in during model runs. 
         self.x_all = []
@@ -287,7 +294,10 @@ class satGEM_field(object):
         self.sal = ts_file['satGEM_sal']
 
         # Data grids
-        self.time = gamma_file['time']
+        time = np.squeeze(np.array(gamma_file['time']))
+        # convert from matlab to python date time.
+        self.time = np.array([oc.matlab2datetime(timeIn) for timeIn in time])
+
         self.depth_grid = gamma_file['depthlvl']
         self.lon = gamma_file['lons']
         self.lat = gamma_file['lats']
@@ -335,7 +345,60 @@ class satGEM_field(object):
 
         return lon_id, lat_id, depth_id, time_id, centerlon_id, centerlat_id
             
-        
+
+    def subgrid(x_pad, y_pad, z_pad, t_pad=0):
+        """
+        Generate a sub grid around a chosen point and return the indices of that grid
+        """
+
+        x_pad = (2 * ((2 * np.pi) / k0))  # pad with 2x wavelength on that axis
+        y_pad = (2 * ((2 * np.pi) / l0))
+        z_pad = (2 * ((2 * np.pi) / m0))
+
+        lon_pad, lat_pad = inverse_hav(x_pad, y_pad, lon_c, lat_c)
+
+
+
+def run_tracing(wave, satGEM, start_time,
+                             time_direction='reverse', duration=24, tstep=10):
+    """
+    Runs ray tracing using the wave objects and gem field objects with option for forward and backwards time finite differenceing steps. 
+    """
+
+    if not isinstance(wave, Wave):
+        raise ValueError('Wave input must be a Wave object')
+
+    if not isinstance(satGEM, satGEM_field):
+        raise ValueError('satGEM input must be a satGEM field object')
+    
+
+    # get initial values from wave object
+    k0 = wave.k
+    l0 = wave.l
+    m0 = wave.m
+    w0 = wave.w0
+    lat0 = wave.lat0
+    lon0 = wave.lon0
+    z0 = wave.z0
+    x0 = float(0) 
+    y0 = float(0)
+
+    # Time arrays and start time in satgem field. 
+    duration = duration*60*60 # Convert duration from hours to seconds
+    time = np.arange(0, duration, tstep) # create time vector (seconds)
+
+    # start time, depth, lat, and lon index in satGEM field
+    start_time = np.argmin(np.abs(start - gem.time))
+    depth_idx = np.argmin(np.abs(z0 = gem.depth_grid[:]))
+    lat_idx = np.argmin(np.abs(lat0 - gem.lat[:]))
+    lat_idx = np.argmin(np.abs(lat0 - gem.lat[:]))
+
+    # Generate subfield around initial location using indices 
+    x_pad = (2 * ((2 * np.pi) / k0)) # pad with 2x wavelength on that axis
+    y_pad = (2 * ((2 * np.pi) / l0))
+    z_pad = (2 * ((2 * np.pi) / m0))
+
+    # convert pads into indices
 
 
 
