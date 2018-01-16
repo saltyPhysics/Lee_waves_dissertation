@@ -108,6 +108,12 @@ def EoZ(N2, w0, f, ):
 
 
 
+def xy2ll(x, y, lat0, lon0):
+    """
+    Conversion for x and y points to lat and long starting with an intitial lat and lon point. 
+    """
+    
+
 def make_segments(x, y):
     """
     Create list of line segments from x and y coordinates, in the correct format
@@ -118,6 +124,43 @@ def make_segments(x, y):
     points = np.array([x, y]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
     return segments
+
+def inverse_hav(x, y, lon1, lat1):
+    """
+    Uses the inverse haversine function to convert x and y distance to a new lat and long coordinate. (see ray tracing docs for full formula)
+
+    Parameters
+    ----------
+    x: x distance traveled (east-west)
+    y: y distance traveled (north-south)
+    lon1: starting longitude (Degrees)
+    lat1: starting latitude (Degrees)
+
+    Returns
+    -------
+    lon2: final longitude (Degrees)
+    lat2: final latitude (Degrees)
+
+    
+    """
+
+    r = 6371e3 # radius of the earth
+    d = np.sqrt(x**2 + y**2) # total distance traveled
+    lat2 =  lat1 + (y/111.11e3) # convert y distance to a new latitude point
+
+    # Convert to radians for use in trig functions
+    latrev1 = np.deg2rad(lat1)
+    latrev2 = np.deg2rad(lat2)
+
+    # inverse haversine formula
+    lon2 = lon1 + 0.5 * np.rad2deg(np.arccos(1 - 2 * ((np.sin(d / (2 * r))**2 
+                - np.sin((latrev2 - latrev1)/2)**2) /
+                (np.cos(latrev1) * np.cos(latrev2)))))
+
+
+    return lon2, lat2 # in degrees
+
+
 
 
 class wave(object):
