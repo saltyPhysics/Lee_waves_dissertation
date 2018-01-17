@@ -55,17 +55,10 @@ satGEM Details
     print(text)
 
 # Wave ray tracing equations
-def N2(x, y, z, t):
-    """
-    N2 as a function (x, y, z, t ) taken from the satGEM field
-    """
-    
 
-    return N2
-
-def wkb_disp(f, N, k, l, m, U, V):
+def dispersion(f, N, k, l, m):
     """
-    WKB Disperision Relation as a function of N, U, V, and K(k, l, m)
+    WKB Disperision Relation as a function of and K(k, l, m)
     """
 
     W = 0
@@ -82,25 +75,25 @@ def absoluteF(x, y, z, t):
     return omegaF
 
 
-def CGz(w0, f, kh, m):
+def CGz(Omega, k, l, m, w=0):
     """
-    Vertical Group Speed
+    Vertical Group Speed (includes vertical flow but is 0 by default)
     """
-    return np.squeeze((((w0**2 - f**2))/(w0*(kh**2 + m**2)))*m)
+    return np.squeeze((N2 * (k**2 + l**2))/(m**3 * Omega) + w )
 
 
-def CGx(N2, w0, k, kh, m, U):
+def CGx(N2, Omega, k, m, u):
     """
     Horizontal group speed in x-direction in a flow
     """
-    return np.squeeze(((N2 - w0**2)/(w0*(kh**2 + m**2)))*k)
+    return np.squeeze((N2*k)/(m**2 * Omega) + u)
 
 
-def CGy(N2, w0, l, kh, m, V):
+def CGy(N2, Omega, l, m, v):
     """
     Horizontal group speed in y-direction in a flow
     """
-    return np.squeeze(((N2 - w0**2)/(w0*(kh**2 + m**2)))*l)
+    return np.squeeze((N2*k)/(m**2 * Omega) + v)
 
 
 def EoZ(N2, w0, f, ):
@@ -113,11 +106,6 @@ def EoZ(N2, w0, f, ):
     return Ez
 
 
-
-def xy2ll(x, y, lat0, lon0):
-    """
-    Conversion for x and y points to lat and long starting with an intitial lat and lon point. 
-    """
     
 
 def make_segments(x, y):
@@ -152,6 +140,7 @@ def inverse_hav(x, y, lon1, lat1):
 
     r = 6371e3 # radius of the earth
     d = np.sqrt(x**2 + y**2) # total distance traveled
+
     lat2 =  lat1 + (y/111.11e3) # convert y distance to a new latitude point
 
     # Convert to radians for use in trig functions
@@ -159,9 +148,16 @@ def inverse_hav(x, y, lon1, lat1):
     latrev2 = np.deg2rad(lat2)
 
     # inverse haversine formula
-    lon2 = lon1 + 0.5 * np.rad2deg(np.arccos(1 - 2 * ((np.sin(d / (2 * r))**2 
+    shift = 0.5 * np.rad2deg(np.arccos(1 - 2 * ((np.sin(d / (2 * r))**2 
                 - np.sin((latrev2 - latrev1)/2)**2) /
                 (np.cos(latrev1) * np.cos(latrev2)))))
+        
+    if x < 0:
+        lon2 = lon1 - shift
+    else:
+        lon2 = lon1 + shift
+    
+    
 
 
     return lon2, lat2 # in degrees
@@ -181,8 +177,8 @@ class Wave(object):
 
     # Add functionality for a default Buoyancy Frequncy and Velocity Profile
 
-    def __init__(self, k=10*1000, l=10*1000,
-                 m=500, w0=8e-4, z0=500, lat=-55, lon=-55):
+    def __init__(self, k=10*1000, l=10*1000, t0=datetime(2012, 11, 2, 3, 0, 0),
+                 m=500, w0=1.8e-4, z0=500, lat=-55, lon=-55):
 
         # Convert wavelengths into wavenumbers
         # Save initial values becuase running the model will change
@@ -195,6 +191,7 @@ class Wave(object):
         self.z0 = np.array([z0], dtype='float')
         self.lat0 = np.array([lat], dtype='float')
         self.lon0 = np.array([lon], dtype='float')
+        self.t0 = datetime(2012, 11, 2, 3, 0, 0)
 
         # These are empty for now- they get filled in during model runs. 
         self.x_all = []
@@ -248,30 +245,8 @@ m = {}
 
         print(txt)
   
-    def back_trace(self, satGEM, duration=24, tstep=5,status=2,
-                   seafloor=4000, print_run_report=False, updates=False):
-        """
-        3 dimensional ray tracing within the time evolving satGEM density and velocity fields
-        
-        - load in the satGEM object when running the model
-        - Structure of integration outlines in ray tracing docs. 
 
 
-
-        Parameters
-        ----------
-        duration:  Run duration (in hours)
-        tstep: time step of model in seconds
-        status:
-        seafloor: choose a seafloor depth in meters (maybe integrate bathymetry at some point using gebco data)
-        
-        
-        Returns
-        -------
-        """
-
-        # Set up model run
-        
 
 
 class satGEM_field(object):
@@ -308,7 +283,7 @@ class satGEM_field(object):
         self.centerlon = vel_file['centerlon']
     
 
-    def locate(lon, lat, depth, time):
+    def locate(self, lon, lat, depth, time):
         """
         Locate point/points within the satgem data set
 
@@ -346,23 +321,48 @@ class satGEM_field(object):
         return lon_id, lat_id, depth_id, time_id, centerlon_id, centerlat_id
             
 
-    def subgrid(x_pad, y_pad, z_pad, t_pad=0):
+    def subgrid(self, lon_c, lat_c, z_c, time_c, k0, l0, m0,
+                x_pads=2, y_pads=2, z_pads=2, t_pads=1):
         """
         Generate a sub grid around a chosen point and return the indices of that grid
         """
 
-        x_pad = (2 * ((2 * np.pi) / k0))  # pad with 2x wavelength on that axis
-        y_pad = (2 * ((2 * np.pi) / l0))
-        z_pad = (2 * ((2 * np.pi) / m0))
+        x_pad = (2 * ((x_pads * np.pi) / k0))  # pad with 2x wavelength on that axis
+        
+        y_pad = (2 * ((y_pads * np.pi) / l0))
 
-        lon_pad, lat_pad = inverse_hav(x_pad, y_pad, lon_c, lat_c)
+        lon_pad1, lat_pad1 = inverse_hav(x_pad, y_pad, lon_c, lat_c)
+        lon_pad2, lat_pad2 = inverse_hav(-x_pad, -y_pad, lon_c, lat_c)
+        
+        
+        # Not sure if there is going to be problems near surface?
+        z_pad1 = z_c + (2 * ((z_pads * np.pi) / m0))
+        z_pad2 = z_c - (2 * ((z_pads * np.pi) / m0))
+
+        # time padding (1 pad = 1 week - time grid of satGEM is weekly)
+        tpad = time_c + dt.timedelta(days=7*t_pads) # if backwards in time use negative pad
+        
+        lon_id1, lat_id1,\
+            depth_id1,time_id1, centerlon_id1,\
+            centerlat_id1 = self.locate(lon_pad1, lat_pad1, z_pad1, time_c)
+            
+        lon_id2, lat_id2, depth_id2, time_id2, centerlon_id2, centerlat_id2 = self.locate(lon_pad2, lat_pad2, z_pad2, tpad)
+            
+        return np.array([lon_id1, lon_id2]), np.array([lat_id1, lat_id2]),\
+                np.array([depth_id1, depth_id2]), np.array([time_id1, time_id2])
 
 
 
-def run_tracing(wave, satGEM, start_time,
-                             time_direction='reverse', duration=24, tstep=10):
+
+
+
+
+
+def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
     """
-    Runs ray tracing using the wave objects and gem field objects with option for forward and backwards time finite differenceing steps. 
+    Runs ray tracing using the wave 
+    objects and gem field objects with option for
+    forward and backwards time finite differenceing steps. 
     """
 
     if not isinstance(wave, Wave):
@@ -373,30 +373,100 @@ def run_tracing(wave, satGEM, start_time,
     
 
     # get initial values from wave object
-    k0 = wave.k
-    l0 = wave.l
-    m0 = wave.m
-    w0 = wave.w0
-    lat0 = wave.lat0
-    lon0 = wave.lon0
-    z0 = wave.z0
-    x0 = float(0) 
-    y0 = float(0)
+    k = wave.k
+    l = wave.l
+    m = wave.m
+    w = wave.w0
+    lat = wave.lat0
+    lon = wave.lon0
+    z = wave.z0
+    x = float(0)
+    y = float(0)
+    x_all = []
+    y_all = []
+    x_all.append(x)
+    y_all.append(y)
+    lat_all.append(lat)
+    lon_all.append(lon)
+    start_time = wave.t0 
 
     # Time arrays and start time in satgem field. 
-    duration = duration*60*60 # Convert duration from hours to seconds
-    time = np.arange(0, duration, tstep) # create time vector (seconds)
+    end_time = start_time + timedelta(hours=duration) # Convert duration from hours to seconds
+    time = np.arange(start_time, end_time, timedelta(seconds=tstep)).astype(datetime) # create time vector (seconds)
 
     # start time, depth, lat, and lon index in satGEM field
-    start_time = np.argmin(np.abs(start - gem.time))
-    depth_idx = np.argmin(np.abs(z0 = gem.depth_grid[:]))
-    lat_idx = np.argmin(np.abs(lat0 - gem.lat[:]))
-    lat_idx = np.argmin(np.abs(lat0 - gem.lat[:]))
+    
+    
+    # Run loop for tracing
 
-    # Generate subfield around initial location using indices 
-    x_pad = (2 * ((2 * np.pi) / k0)) # pad with 2x wavelength on that axis
-    y_pad = (2 * ((2 * np.pi) / l0))
-    z_pad = (2 * ((2 * np.pi) / m0))
+    for i, t in enumerate(time[1:]):
+        
+        # list with [lon, lat, depth, time, centerlon, centerlat] indices
+        lat_idx, lon_idx, z_idx,\
+            t_idx, clat_idx, clon_idx = satGEM.locate(lon, lat, z, t)
+        
+        # satGEM values
+        
+        # Vertical N2 profile at current location
+        N2_vert, p_grid = gsw.Nsquared(satGEM.sal[lon_idx, lat_idx, :, t_idx],
+                              satGEM.temp[lon_idx, lat_idx, :, t_idx],
+                              satGEM.depth_grid[:,0],
+                              axis=-1)
+        idx_n = np.argmin(np.abs(p_grid - z))
+        N2 = N2_vert[idx_n]
+        u = satGEM.u[lon_idx, clat_idx, z_idx, t_idx]
+        v = satGEM.v[clon_idx, lat_idx, z_idx, t_idx]
+        
+        
+        # X step
+        x += tstep * CGx(N2, Omega, k, m, u)
+        
+        # Y step
+        y += tstep * CGy(N2, Omega, l, m, v)
+        
+        # Z step
+        z += tstep * CGz(N2, Omega, k, l, m)
+        
+        # New position
+        lon2, lat2 = inverse_hav(x, y, lon, lat)
+        
+        lat_idx, lon_idx, z_idx,\
+            t_idx, clat_idx, clon_idx = satGEM.locate(lon2, lat2, z, time)
+        
+        
+        # New satGEM properties (U, V, N)
+        
+        # k step
+        
+        # l step
+        
+        # m step
+        
+        # omega step
+        
+        
+        # boundary checks
+        
+        
+        # store data 
+        
 
-    # convert pads into indices
 
+
+
+
+def testing():
+    """
+    Random variables used for testing things
+    """
+    
+    k = 0.0005233333333333333
+    l = 0.0005233333333333333
+    m = 0.01256
+    
+    gem = satGEM_field()
+    wave = Wave(k=k, l=l, m=m)
+    
+    
+    test = gem.subgrid(lon_c, lat_c, wave.z0, time, wave.k, wave.l, wave.m)
+    
