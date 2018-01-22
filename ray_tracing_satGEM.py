@@ -56,44 +56,49 @@ satGEM Details
 
 # Wave ray tracing equations
 
-def dispersion(f, N, k, l, m):
+def Kvec(k, l, m):
+    """
+    Returns magnitude of wavenumber vector
+    """
+
+    return np.sqrt(k**2 + l**2 + m**2)
+
+def dispersion(f, N2, k, l, m):
     """
     WKB Disperision Relation as a function of and K(k, l, m)
     """
 
-    W = 0
-
+    W = np.sqrt((f**2 * m**2 + N2*(k**2 + l**2))\
+                / (Kvec(k, l, m )**2))
 
     return W
-
-
-def absoluteF(x, y, z, t):
-    """
-    Omega as a function of (x, y ,z ,t) from the satGEM field
-    """
-
-    return omegaF
 
 
 def CGz(Omega, k, l, m, w=0):
     """
     Vertical Group Speed (includes vertical flow but is 0 by default)
     """
-    return np.squeeze((N2 * (k**2 + l**2))/(m**3 * Omega) + w )
+    K = Kvec(k, l, m)
+
+    return np.squeeze(((k**2 + l**2) * m * (f**2 - N2)) / (K**4 * Omega))
 
 
-def CGx(N2, Omega, k, m, u):
+def CGx(N2, Omega, k, l, m, u):
     """
     Horizontal group speed in x-direction in a flow
     """
-    return np.squeeze((N2*k)/(m**2 * Omega) + u)
+    K = Kvec(k, l, m)
+
+    return np.squeeze((k * m**2 * (N2 - f**2))/(K**4 * Omega) + u)
 
 
-def CGy(N2, Omega, l, m, v):
+def CGy(N2, Omega, k, l, m, v):
     """
     Horizontal group speed in y-direction in a flow
     """
-    return np.squeeze((N2*k)/(m**2 * Omega) + v)
+    K = Kvec(k, l, m)
+
+    return np.squeeze((l * m**2 * (N2 - f**2)) / (K**4 * Omega) + v)
 
 
 def EoZ(N2, w0, f, ):
@@ -105,8 +110,59 @@ def EoZ(N2, w0, f, ):
                     / ((w0**2 - f**2)**(3 / 2) * (N2 - w0**2)**(1 / 2)))
     return Ez
 
+def refraction(N, k, l, m, dN, di, Omega):
+    """
+    Refraction index of internal wave
+    """
+    K = Kvec(k, l, m)
+    return ((N*(k**2 + l**2)) / (K**2 * Omega)) * (dN/di)
+    
+    
+def dk(dU, dV,dx, k, l , m, dN, N, Omega):
+    """
+    Change of wavenumber k in time
+    """
+    ri = refraction(N, k, l, m, dN, dx, Omega)
+
+    dk = -1 * (ri + k * (dU/dx) + k * (dV/dx))
+
+    return dk
+
+
+def dl(dU, dV, dy, k, l, m, dN, N, Omega):
+    """
+    Change of wavenumber k in time
+    """
+    ri = refraction(N, k, l, m, dN, dy, Omega)
+
+    dl = -1 * (ri + l * (dU / dy) + l * (dV / dy))
+
+    return dl
+
+
+def dm(dU, dV, dz, k, l, m, dN, N, Omega):
+    """
+    Discretized Change of wavenumber k in time
+    """
+    ri = refraction(N, k, l, m, dN, dz, Omega)
+
+    dm = -1 * (ri + l * (dU / dz) + l * (dV / dz))
+
+    return dm
+
+
+def dOmega(rx, ry, rz, k, l, dU, dV):
+    """
+    Change in intrinsic frequency / dispersion relation
+    """
+
+    dW = (rx + ry + rx) + k * dU + l * dV
+
+    return dW
+
 
     
+
 
 def make_segments(x, y):
     """
@@ -241,7 +297,7 @@ m = {}
     m: {}
     kh: {}
     Frequency: {}
-'''.format(np.array2string(self.k_init), self.l_init, self.m_init, self.kh_init, self.w0_init)
+'''.format(np.array2string(self.k), self.l, self.m, self.kh, self.w0)
 
         print(txt)
   
@@ -376,42 +432,65 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
     k = wave.k
     l = wave.l
     m = wave.m
-    w = wave.w0
+    Omega = wave.w0
     lat = wave.lat0
     lon = wave.lon0
     z = wave.z0
     x = float(0)
     y = float(0)
+
     x_all = []
     y_all = []
+    z_all = []
+    k_all = []
+    l_all = []
+    m_all = []
+    om_all = []
+    lat_all = []
+    lon_all = []
+
+    # add start values (theres probably a better way to do this)
     x_all.append(x)
     y_all.append(y)
+    z_all.append(z)
+    k_all.append(k)
+    l_all.append(l)
+    m_all.append(m)
+    om_all.append(Omega)
     lat_all.append(lat)
     lon_all.append(lon)
+
     start_time = wave.t0 
 
+
     # Time arrays and start time in satgem field. 
-    end_time = start_time + timedelta(hours=duration) # Convert duration from hours to seconds
-    time = np.arange(start_time, end_time, timedelta(seconds=tstep)).astype(datetime) # create time vector (seconds)
+    if time_direction == 'reverse':
+        end_time = start_time - timedelta(hours=duration)
+        tstep = -tstep
+    else:
+        end_time = start_time + timedelta(hours=duration)
+    time = np.arange(start_time, end_time,\
+                     timedelta(seconds=tstep)).astype(datetime) # create time vector (seconds)
 
     # start time, depth, lat, and lon index in satGEM field
     
-    
+    lat_idx, lon_idx, z_idx,\
+            t_idx, clat_idx, clon_idx = satGEM.locate(lon, lat, z, time[0])
     # Run loop for tracing
 
-    for i, t in enumerate(time[1:]):
+    for i, t in enumerate(time):
         
         # list with [lon, lat, depth, time, centerlon, centerlat] indices
         lat_idx, lon_idx, z_idx,\
             t_idx, clat_idx, clon_idx = satGEM.locate(lon, lat, z, t)
         
         # satGEM values
-        
-        # Vertical N2 profile at current location
+        # Vertical N2 profile at current location 
         N2_vert, p_grid = gsw.Nsquared(satGEM.sal[lon_idx, lat_idx, :, t_idx],
                               satGEM.temp[lon_idx, lat_idx, :, t_idx],
                               satGEM.depth_grid[:,0],
                               axis=-1)
+
         idx_n = np.argmin(np.abs(p_grid - z))
         N2 = N2_vert[idx_n]
         u = satGEM.u[lon_idx, clat_idx, z_idx, t_idx]
@@ -419,37 +498,91 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
         
         
         # X step
-        x += tstep * CGx(N2, Omega, k, m, u)
+        dx = tstep * CGx(N2, Omega, k, m, u)
+        x += dx
         
         # Y step
-        y += tstep * CGy(N2, Omega, l, m, v)
+        dy = tstep * CGy(N2, Omega, l, m, v)
+        y += dy
         
         # Z step
-        z += tstep * CGz(N2, Omega, k, l, m)
+        dz = tstep * CGz(N2, Omega, k, l, m)
+        z += dz
         
         # New position
         lon2, lat2 = inverse_hav(x, y, lon, lat)
         
-        lat_idx, lon_idx, z_idx,\
-            t_idx, clat_idx, clon_idx = satGEM.locate(lon2, lat2, z, time)
+        lat_idx2, lon_idx2, z_idx2,\
+            t_idx2, clat_idx2, clon_idx2 = satGEM.locate(lon2, lat2, z, time[i+1])
         
+        # change in satGEM properties (U, V, N)
+        N2_vert2, p_grid2 = gsw.Nsquared(satGEM.sal[lon_idx, lat_idx, :, t_idx],
+                              satGEM.temp[lon_idx, lat_idx, :, t_idx],
+                              satGEM.depth_grid[:,0],
+                              axis=-1)
+        idx_n2 = np.argmin(np.abs(p_grid2 - z))
+        N2_2 = N2_vert2[idx_n2]
+        dN = np.sqrt(N2_2) - np.sqrt(N2)
+
+
+        u2 = satGEM.u[lon_idx2, clat_idx2, z_idx2, t_idx2]
+        v2 = satGEM.v[clon_idx2, lat_idx2, z_idx2, t_idx2]
         
-        # New satGEM properties (U, V, N)
+        # Changes in U
+        du = u2 - u
         
+        # V changes
+        dv = v2 - v
+
         # k step
-        
+        k += dk(du, dv, dx, k, l, m, dN, np.sqrt(N2_2), Omega)*tstep
+
         # l step
-        
+        l += dl(du, dv, dy, k, l, m, dN, np.sqrt(N2_2), Omega) * tstep
+    
         # m step
+        m += dm(du, dv, dz, k, l, m, dN, np.sqrt(N2_2), Omega) * tstep
         
         # omega step
-        
+        rx = refraction(np.sqrt(N2_2), k, l, m, dN, dx, Omega)
+        ry = refraction(np.sqrt(N2_2), k, l, m, dN, dy, Omega)
+        rz = refraction(np.sqrt(N2_2), k, l, m, dN, dz, Omega)
+
+        Omega += dOmega(rx, ry, rz, k, l, dU, dV)*tstep
         
         # boundary checks
+        lon = lon2 
+        lat = lat2
         
         
         # store data 
-        
+        x_all.append(x)
+        y_all.append(y)
+        z_all.append(z)
+        k_all.append(k)
+        l_all.append(l)
+        m_all.append(m)
+        om_all.append(Omega)
+        lat_all.append(lat)
+        lon_all.append(lon)
+
+    # store all results in dictionary (keeps things concise when using)
+    results = {
+            'x': np.vstack(x_all),
+            'y': np.vstack(y_all),
+            'z': np.vstack(z_all),
+            'k': np.vstack(k_all),
+            'l': np.vstack(l_all),
+            'm': np.vstack(m_all),
+            'omega': np.vstack(om_all),
+            'lon': np.vstack(lon_all),
+            'lat': np.vstack(lat_all),
+            'time': time
+
+    }
+
+    return results
+
 
 
 
@@ -457,15 +590,18 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
 
 def testing():
     """
-    Random variables used for testing things
+    Random variables used for testing ray tracing
+    
     """
     
     k = 0.0005233333333333333
     l = 0.0005233333333333333
     m = 0.01256
     
+    towyo_date =  datetime(2012,	2,	28,	21,	33,	44)
+    
     gem = satGEM_field()
-    wave = Wave(k=k, l=l, m=m)
+    wave = Wave(k=k, l=l, m=m, t0=towyo_date)
     
     
     test = gem.subgrid(lon_c, lat_c, wave.z0, time, wave.k, wave.l, wave.m)
