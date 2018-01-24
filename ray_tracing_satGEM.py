@@ -61,7 +61,7 @@ def Kvec(k, l, m):
     Returns magnitude of wavenumber vector
     """
 
-    return np.sqrt(k**2 + l**2 + m**2)
+    return k**2 + l**2 + m**2
 
 def dispersion(f, N2, k, l, m):
     """
@@ -69,36 +69,40 @@ def dispersion(f, N2, k, l, m):
     """
 
     W = np.sqrt((f**2 * m**2 + N2*(k**2 + l**2))\
-                / (Kvec(k, l, m )**2))
+                / ((k**2 +l**2 + m**2)))
 
     return W
 
 
-def CGz(Omega, k, l, m, w=0):
+def CGz(Omega, k, l, m, f, N2, w=0):
     """
     Vertical Group Speed (includes vertical flow but is 0 by default)
     """
-    K = Kvec(k, l, m)
+    K2 = k**2 + l**2 + m**2
 
-    return np.squeeze(((k**2 + l**2) * m * (f**2 - N2)) / (K**4 * Omega))
+    return (-1*(k**2 + l**2) * m * (N2 - f**2)) / (K2**2 * Omega)
 
 
-def CGx(N2, Omega, k, l, m, u):
+def CGx(N2, Omega, k, l, m, u, f):
     """
     Horizontal group speed in x-direction in a flow
     """
-    K = Kvec(k, l, m)
+    K2 = k**2 + l**2 + m**2
+    
+    cgx = (k * m**2 * (N2 - f**2))/(K2**2 * Omega) + u
+    
+    return cgx
 
-    return np.squeeze((k * m**2 * (N2 - f**2))/(K**4 * Omega) + u)
 
-
-def CGy(N2, Omega, k, l, m, v):
+def CGy(N2, Omega, k, l, m, v, f):
     """
     Horizontal group speed in y-direction in a flow
     """
-    K = Kvec(k, l, m)
+    K2 = k**2 + l**2 + m**2
+    
+    cgy = (l * m**2 * (N2 - f**2))/(K2**2 * Omega) + v
 
-    return np.squeeze((l * m**2 * (N2 - f**2)) / (K**4 * Omega) + v)
+    return cgy
 
 
 def EoZ(N2, w0, f, ):
@@ -114,8 +118,9 @@ def refraction(N, k, l, m, dN, di, Omega):
     """
     Refraction index of internal wave
     """
-    K = Kvec(k, l, m)
-    return ((N*(k**2 + l**2)) / (K**2 * Omega)) * (dN/di)
+    K = k**2 + l**2 + m**2
+    
+    return ((N*(k**2 + l**2)) / (K * Omega)) * (dN/di)
     
     
 def dk(dU, dV,dx, k, l , m, dN, N, Omega):
@@ -124,7 +129,7 @@ def dk(dU, dV,dx, k, l , m, dN, N, Omega):
     """
     ri = refraction(N, k, l, m, dN, dx, Omega)
 
-    dk = -1 * (ri + k * (dU/dx) + k * (dV/dx))
+    dk = -1 * (ri + k * (dU/dx) + l * (dV/dx))
 
     return dk
 
@@ -135,7 +140,7 @@ def dl(dU, dV, dy, k, l, m, dN, N, Omega):
     """
     ri = refraction(N, k, l, m, dN, dy, Omega)
 
-    dl = -1 * (ri + l * (dU / dy) + l * (dV / dy))
+    dl = -1 * (ri + k * (dU / dy) + l * (dV / dy))
 
     return dl
 
@@ -146,7 +151,7 @@ def dm(dU, dV, dz, k, l, m, dN, N, Omega):
     """
     ri = refraction(N, k, l, m, dN, dz, Omega)
 
-    dm = -1 * (ri + l * (dU / dz) + l * (dV / dz))
+    dm = -1 * (ri + k * (dU / dz) + l * (dV / dz))
 
     return dm
 
@@ -234,7 +239,7 @@ class Wave(object):
     # Add functionality for a default Buoyancy Frequncy and Velocity Profile
 
     def __init__(self, k=10*1000, l=10*1000, t0=datetime(2012, 11, 2, 3, 0, 0),
-                 m=500, w0=1.8e-4, z0=500, lat=-55, lon=-55):
+                 m=500, w0=-1.3e-4, z0=500, lat=-55, lon=-55):
 
         # Convert wavelengths into wavenumbers
         # Save initial values becuase running the model will change
@@ -429,13 +434,13 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
     
 
     # get initial values from wave object
-    k = wave.k
-    l = wave.l
-    m = wave.m
+    k = wave.k[:]
+    l = wave.l[:]
+    m = wave.m[:]
     Omega = wave.w0
     lat = wave.lat0
     lon = wave.lon0
-    z = wave.z0
+    z = wave.z0[:]
     x = float(0)
     y = float(0)
 
@@ -448,6 +453,9 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
     om_all = []
     lat_all = []
     lon_all = []
+    cgx = []
+    cgy = []
+    cgz = []
 
     # add start values (theres probably a better way to do this)
     x_all.append(x)
@@ -469,20 +477,22 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
         tstep = -tstep
     else:
         end_time = start_time + timedelta(hours=duration)
-    time = np.arange(start_time, end_time,\
-                     timedelta(seconds=tstep)).astype(datetime) # create time vector (seconds)
+        
+    time = np.arange(start_time, end_time, timedelta(seconds=tstep)).astype(datetime) # create time vector (seconds)
 
     # start time, depth, lat, and lon index in satGEM field
     
-    lat_idx, lon_idx, z_idx,\
-            t_idx, clat_idx, clon_idx = satGEM.locate(lon, lat, z, time[0])
+    lon_idx, lat_idx, z_idx,\
+            t_idx, clon_idx, clat_idx = satGEM.locate(lon, lat, z, time[0])
     # Run loop for tracing
 
-    for i, t in enumerate(time):
+    for i, t in enumerate(time[:-1]):
+        
+        f = gsw.f(lat)
         
         # list with [lon, lat, depth, time, centerlon, centerlat] indices
-        lat_idx, lon_idx, z_idx,\
-            t_idx, clat_idx, clon_idx = satGEM.locate(lon, lat, z, t)
+        lon_idx, lat_idx, z_idx,\
+            t_idx, clon_idx, clat_idx = satGEM.locate(lon, lat, z, t)
         
         # satGEM values
         # Vertical N2 profile at current location 
@@ -493,27 +503,42 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
 
         idx_n = np.argmin(np.abs(p_grid - z))
         N2 = N2_vert[idx_n]
+        if not np.isfinite(N2):
+            print('N2 error')
+            break
+
         u = satGEM.u[lon_idx, clat_idx, z_idx, t_idx]
         v = satGEM.v[clon_idx, lat_idx, z_idx, t_idx]
         
+        if not np.isfinite(u):
+            print('u error')
+            break
+        
+        if not np.isfinite(v):
+            print('v error')
+            break
+        
         
         # X step
-        dx = tstep * CGx(N2, Omega, k, m, u)
-        x += dx
+        dx = tstep * CGx(N2, Omega, k, l, m, u, f)
+        x  = x + dx
+
+#        print('x step: {}'.format(dx))
         
         # Y step
-        dy = tstep * CGy(N2, Omega, l, m, v)
-        y += dy
+        dy = tstep * CGy(N2, Omega, k, l, m, v, f)
+        y = y + dy
         
         # Z step
-        dz = tstep * CGz(N2, Omega, k, l, m)
-        z += dz
+        dz = tstep * CGz(Omega, k, l, m, f, N2)
+        z = z + dz
+        print(tstep)
         
         # New position
         lon2, lat2 = inverse_hav(x, y, lon, lat)
         
-        lat_idx2, lon_idx2, z_idx2,\
-            t_idx2, clat_idx2, clon_idx2 = satGEM.locate(lon2, lat2, z, time[i+1])
+        lon_idx2, lat_idx2, z_idx2,\
+            t_idx2, clon_idx2, clat_idx2 = satGEM.locate(lon2, lat2, z, time[i+1])
         
         # change in satGEM properties (U, V, N)
         N2_vert2, p_grid2 = gsw.Nsquared(satGEM.sal[lon_idx, lat_idx, :, t_idx],
@@ -521,8 +546,8 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
                               satGEM.depth_grid[:,0],
                               axis=-1)
         idx_n2 = np.argmin(np.abs(p_grid2 - z))
-        N2_2 = N2_vert2[idx_n2]
-        dN = np.sqrt(N2_2) - np.sqrt(N2)
+        N2_2 = np.abs(N2_vert2[idx_n2])
+        dN = np.sqrt(N2_2) - np.sqrt(np.abs(N2))
 
 
         u2 = satGEM.u[lon_idx2, clat_idx2, z_idx2, t_idx2]
@@ -535,24 +560,28 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
         dv = v2 - v
 
         # k step
-        k += dk(du, dv, dx, k, l, m, dN, np.sqrt(N2_2), Omega)*tstep
+        k = k + dk(du, dv, dx, k, l, m, dN, np.sqrt(N2_2), Omega)*tstep
 
         # l step
-        l += dl(du, dv, dy, k, l, m, dN, np.sqrt(N2_2), Omega) * tstep
+        l = l + dl(du, dv, dy, k, l, m, dN, np.sqrt(N2_2), Omega)*tstep
     
         # m step
-        m += dm(du, dv, dz, k, l, m, dN, np.sqrt(N2_2), Omega) * tstep
+        m = m + dm(du, dv, dz, k, l, m, dN, np.sqrt(N2_2), Omega)*tstep
         
         # omega step
         rx = refraction(np.sqrt(N2_2), k, l, m, dN, dx, Omega)
         ry = refraction(np.sqrt(N2_2), k, l, m, dN, dy, Omega)
         rz = refraction(np.sqrt(N2_2), k, l, m, dN, dz, Omega)
 
-        Omega += dOmega(rx, ry, rz, k, l, dU, dV)*tstep
+        Omega = Omega + dOmega(rx, ry, rz, k, l, du, dv)*tstep
         
         # boundary checks
         lon = lon2 
         lat = lat2
+        
+        if z < 0 :
+            print('Wave hit surface')
+            break
         
         
         # store data 
@@ -565,6 +594,9 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
         om_all.append(Omega)
         lat_all.append(lat)
         lon_all.append(lon)
+        cgx.append(dx/tstep)
+        cgy.append(dy/tstep)
+        cgz.append(dz/tstep)
 
     # store all results in dictionary (keeps things concise when using)
     results = {
@@ -577,7 +609,10 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
             'omega': np.vstack(om_all),
             'lon': np.vstack(lon_all),
             'lat': np.vstack(lat_all),
-            'time': time
+            'CGx' : np.vstack(cgx),
+            'CGy' : np.vstack(cgy),
+            'CGz' : np.vstack(cgz),
+            'time': time[:i+1]
 
     }
 
@@ -585,7 +620,26 @@ def run_tracing(wave, satGEM, time_direction='reverse', duration=24, tstep=10):
 
 
 
-
+def plot_tracing(results):
+    """
+    standard plotting function for viewing ray tracing results
+    """
+    fig1 = plt.figure(figsize = (15,8))
+    plt.subplot(221)
+    plt.plot(results['x'], -results['z'])
+    plt.title('x vs z')
+    
+    plt. subplot(222)
+    plt.plot(results['time'], -results['z'])
+    plt.title('time vs z')
+    
+    plt. subplot(223)
+    plt.plot(results['x'], -results['y'])
+    plt.title('x vs y')
+    
+    plt. subplot(224)
+    plt.plot(results['lon'], -results['lat'])
+    plt.title('lon vs lat')
 
 
 def testing():
@@ -594,15 +648,17 @@ def testing():
     
     """
     
-    k = 0.0005233333333333333
-    l = 0.0005233333333333333
-    m = 0.01256
+    k =  0.000403364
+    l = -0.000173485
+    m = -0.01256
+    w0 = -0.00013848
     
     towyo_date =  datetime(2012,	2,	28,	21,	33,	44)
     
     gem = satGEM_field()
-    wave = Wave(k=k, l=l, m=m, t0=towyo_date)
+    wave = Wave(k=k, l=l, m=m, w0=w0, t0=towyo_date)
     
+    results = run_tracing(wave, gem, duration=24, tstep=10, time_direction='reverse')
     
-    test = gem.subgrid(lon_c, lat_c, wave.z0, time, wave.k, wave.l, wave.m)
+    plot_tracing(results)
     
