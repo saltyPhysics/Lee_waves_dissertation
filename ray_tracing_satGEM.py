@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.colors as colors
+import matplotlib.dates as mdates
 import cmocean
 import h5py
 from datetime import datetime, timedelta
@@ -166,7 +167,7 @@ def dOmega(rx, ry, rz, k, l, dU, dV):
     return dW
 
 
-    
+
 
 
 def make_segments(x, y):
@@ -252,7 +253,7 @@ class Wave(object):
         self.z0 = np.array([z0], dtype='float')
         self.lat0 = np.array([lat], dtype='float')
         self.lon0 = np.array([lon], dtype='float')
-        self.t0 = datetime(2012, 11, 2, 3, 0, 0)
+        self.t0 = t0
 
         # These are empty for now- they get filled in during model runs. 
         self.x_all = []
@@ -466,6 +467,9 @@ def run_tracing(wave, satGEM, time_direction='reverse',
     cgy = []
     cgz = []
     bathy = []
+    N2_all = []
+    N2_grid = []
+
 
     # add start values (theres probably a better way to do this)
     x_all.append(x)
@@ -489,15 +493,16 @@ def run_tracing(wave, satGEM, time_direction='reverse',
         end_time = start_time + timedelta(hours=duration)
         
     else:
-        print("Invalid time direction - accepts 'forward' or 'reverse'")
-        
+        raise ValueError("Invalid time direction \
+                            - accepts 'forward' or 'reverse'")
+
         
     time = np.arange(start_time, end_time, timedelta(seconds=tstep)).astype(datetime) # create time vector (seconds)
 
     # start time, depth, lat, and lon index in satGEM field
     
-    lon_idx, lat_idx, z_idx,\
-            t_idx, clon_idx, clat_idx = satGEM.locate(lon, lat, z, time[0])
+    # lon_idx, lat_idx, z_idx,\
+    #         t_idx, clon_idx, clat_idx = satGEM.locate(lon, lat, z, time[0])
     # Run loop for tracing
 
     for i, t in enumerate(time[:-1]):
@@ -512,24 +517,70 @@ def run_tracing(wave, satGEM, time_direction='reverse',
         # Vertical N2 profile at current location 
         N2_vert, p_grid = gsw.Nsquared(satGEM.sal[lon_idx, lat_idx, :, t_idx],
                               satGEM.temp[lon_idx, lat_idx, :, t_idx],
-                              satGEM.depth_grid[:,0],
+                              satGEM.depth_grid[:,:].flatten(),lat[:],
                               axis=-1)
+        N2_all.append(N2_vert.flatten())
+        N2_grid.append(p_grid.flatten())
+        # REMOVE THIS WHEN DONE!!!
+        # plt.plot(p_grid, N2_vert)
 
-        idx_n = np.argmin(np.abs(p_grid - z))
-        N2 = N2_vert[idx_n]
-        if not np.isfinite(N2):
-            print('N2 error')
-            break
+        idx_n = np.argmin(np.abs(p_grid.flatten() - z))
+        N2 = N2_vert.flatten()[idx_n]
 
         u = satGEM.u[lon_idx, clat_idx, z_idx, t_idx]
         v = satGEM.v[clon_idx, lat_idx, z_idx, t_idx]
+
+        # Check 1 (these have to be done before calculations)
+        if not np.isfinite(N2):
+            print('N2 error')
+            x_all.append(x)
+            y_all.append(y)
+            z_all.append(z)
+            k_all.append(k)
+            l_all.append(l)
+            m_all.append(m)
+            om_all.append(Omega)
+            lat_all.append(lat)
+            lon_all.append(lon)
+            cgx.append(dx / tstep)
+            cgy.append(dy / tstep)
+            cgz.append(dz / tstep)
+            bathy.append(bottom)
+            break
+
         
         if not np.isfinite(u):
             print('u error')
+            x_all.append(x)
+            y_all.append(y)
+            z_all.append(z)
+            k_all.append(k)
+            l_all.append(l)
+            m_all.append(m)
+            om_all.append(Omega)
+            lat_all.append(lat)
+            lon_all.append(lon)
+            cgx.append(dx / tstep)
+            cgy.append(dy / tstep)
+            cgz.append(dz / tstep)
+            bathy.append(bottom)
             break
         
         if not np.isfinite(v):
             print('v error')
+            x_all.append(x)
+            y_all.append(y)
+            z_all.append(z)
+            k_all.append(k)
+            l_all.append(l)
+            m_all.append(m)
+            om_all.append(Omega)
+            lat_all.append(lat)
+            lon_all.append(lon)
+            cgx.append(dx / tstep)
+            cgy.append(dy / tstep)
+            cgz.append(dz / tstep)
+            bathy.append(bottom)
             break
         
         
@@ -556,10 +607,12 @@ def run_tracing(wave, satGEM, time_direction='reverse',
             t_idx2, clon_idx2, clat_idx2 = satGEM.locate(lon2, lat2, z, time[i+1])
         
         # change in satGEM properties (U, V, N)
-        N2_vert2, p_grid2 = gsw.Nsquared(satGEM.sal[lon_idx, lat_idx, :, t_idx],
-                              satGEM.temp[lon_idx, lat_idx, :, t_idx],
-                              satGEM.depth_grid[:,0],
-                              axis=-1)
+        N2_vert2, p_grid2 = gsw.Nsquared(satGEM.sal[lon_idx2, lat_idx2,
+                                :, t_idx2],
+                                satGEM.temp[lon_idx2, lat_idx2, :, t_idx2],
+                                satGEM.depth_grid[:,:].flatten(),
+                                axis=-1)
+
         idx_n2 = np.argmin(np.abs(p_grid2 - z))
         N2_2 = np.abs(N2_vert2[idx_n2])
         dN = np.sqrt(N2_2) - np.sqrt(np.abs(N2))
@@ -591,6 +644,7 @@ def run_tracing(wave, satGEM, time_direction='reverse',
         rz = refraction(np.sqrt(N2_2), k, l, m, dN, dz, Omega)
 
         Omega = Omega + dOmega(rx, ry, rz, k, l, du, dv)
+
         
         # boundary checks
         
@@ -601,15 +655,6 @@ def run_tracing(wave, satGEM, time_direction='reverse',
         idx2 = np.argmin(np.abs(lat - satGEM.bathy['lat'][:]))
         
         bottom = -1*satGEM.bathy['elevation'][idx2, idx1]
-        
-        if z > bottom:
-            print('Wave hit seafloor')
-            break
-        
-        
-        if z < 0 :
-            print('Wave hit surface')
-            break
         
         
         # store data 
@@ -626,11 +671,26 @@ def run_tracing(wave, satGEM, time_direction='reverse',
         cgy.append(dy/tstep)
         cgz.append(dz/tstep)
         bathy.append(bottom)
+
+        # Check Parameters before next step
+        if z > bottom:
+            print('Wave hit seafloor')
+            break
+
+        if z < 0 :
+            print('Wave hit surface')
+            break
+
+        # if np.abs(Omega) < np.abs(f):
+        #     print('Wave Frequency below inertial Frequency')
+        #     break
         
         if status:
             print('\r{} % done'.format(100*(i/len(time))))
 
     # store all results in dictionary (keeps things concise when using)
+    elapsed_time = np.vstack([(timeIn - time[0]).total_seconds() 
+                    for timeIn in time[:i + 2]])
     results = {
             'x': np.vstack(x_all),
             'y': np.vstack(y_all),
@@ -642,21 +702,29 @@ def run_tracing(wave, satGEM, time_direction='reverse',
             'lon': np.vstack(lon_all),
             'lat': np.vstack(lat_all),
             'time': time[:i+1],
+            'elapsed_time': elapsed_time
 
     }
+    
     
     if bathy:
         results['bathy'] = np.vstack(bathy)
         results['cgx'] = np.vstack(cgx)
         results['cgy'] = np.vstack(cgy)
         results['cgz'] = np.vstack(cgz)
+
+
+    N2_all = np.vstack(N2_all)
+    N2_grid = np.vstack(N2_grid)
     
+    results['N2'] = N2_all
+    results['N2_grid'] = N2_grid
     
     return results
 
 
 
-def plot_tracing(results, gem):
+def plot_tracing(results, gem, plot_satgem=True):
     """
     standard plotting function for viewing ray tracing results
     """
@@ -664,6 +732,8 @@ def plot_tracing(results, gem):
     if not isinstance(gem, satGEM_field):
         raise ValueError('satGEM input must be a satGEM field object')
         
+    
+
     
     fig1 = plt.figure(figsize = (15,8))
     plt.subplot(421)
@@ -697,11 +767,11 @@ def plot_tracing(results, gem):
     plt.title('lon vs lat')
  
     plt.subplot(426)
-    plt.plot(results['time'], np.log10(np.abs(results['k'])))
+    plt.plot(results['elapsed_time'], np.log10(np.abs(results['k'])))
     plt.title('time vs log10(k)')
     
     plt.subplot(427)
-    plt.plot(results['time'], np.log10(np.abs(results['m'])))
+    plt.plot(results['elapsed_time'], np.log10(np.abs(results['m'])))
     plt.title('time vs log10(m)')
     
     plt.subplot(428)
@@ -729,7 +799,8 @@ def plot_tracing(results, gem):
     plt.title('transect ')
  
 
-def plot_map(results, gem, buffer=0.2):
+def dashboard(results, gem, lc='#ff3f02',
+                lw=1.5, ms=20, buffer=0.2, cls=20, plot_satgem=True):
     """
     Quick function for plotting a ray path over local bathymetry with
     start and ends marked
@@ -743,6 +814,37 @@ def plot_map(results, gem, buffer=0.2):
 
 
     """
+
+    distance = 1e-3 * np.sqrt(results['x']**2 + results['y']**2)
+    f = gsw.f(results['lat'])
+    N2_grid = results['N2']
+    p_grid = results['N2_grid']
+    # if plot_satgem:
+    #     # Get N2 field from satgem data for plotting in background
+    #     N2_grid = []
+    #     p_grid = []
+
+    #     for i in range(len(results['time'])):
+    #         lon_idx, lat_idx, z_idx,\
+    #             t_idx, clon_idx, clat_idx = gem.locate(results['lon'][i],
+    #                                                     results['lat'][i],
+    #                                                     results['z'][i],
+    #                                                     results['time'][i],
+    #             )
+
+    #         N2, p_mid = gsw.Nsquared(gem.sal[lon_idx, lat_idx, :, t_idx],
+    #                         gem.temp[lon_idx, lat_idx, :, t_idx],
+    #                         gem.depth_grid[:, 0],
+    #                         axis=-1)
+
+    #         N2_grid.append(N2)
+    #         p_grid.append(p_mid)
+            
+    #     N2_grid = np.vstack(N2_grid)
+    #     p_grid = np.vstack(p_grid)
+        
+
+
 
     latlims = np.array([np.nanmin(results['lat']) - buffer,
                         np.nanmax(results['lat']) + buffer])
@@ -760,15 +862,88 @@ def plot_map(results, gem, buffer=0.2):
     lat_b = gem.bathy['lat'][latlims]
     lon_b = gem.bathy['lon'][lonlims]
 
+    clevels = np.linspace(np.nanmin(bathy_rev), np.nanmax(bathy_rev), cls)
 
-    plt.figure(figsize=(8, 8))
-    plt.contour(lon_b, lat_b, bathy_rev, colors='k')
+    fig = plt.figure(figsize=(16, 10))
+
+    # Map Plot
+    plt.subplot(221)
+    plt.contour(lon_b, lat_b, bathy_rev, colors='k', levels=clevels)
     plt.pcolormesh(lon_b, lat_b, bathy_rev, shading='gouraud')
     plt.plot(results['lon'], results['lat'], c='r')
-    plt.scatter(results['lon'][0], results['lat'][0], marker='*', c='g')
-    plt.scatter(results['lon'][-1], results['lat'][-1], marker='*', c='r')
+    plt.scatter(results['lon'][0], results['lat'][0],
+                marker='*', c='#00ff32', s=ms)
+    plt.scatter(results['lon'][-1], results['lat'][-1], 
+                            marker='*', c='r', s=ms)
 
-    return name = models.ForeignKeyField('TargetModel', related_name='', on_delete=models.CASCADE)
+
+    # Generate transec bathymetry (interpolate to smooth)
+    
+
+    bathy1, idx1 = np.unique(results['bathy'], return_index=True)
+    bathy1 = np.vstack([results['bathy'][index] for index in sorted(idx1)])
+    x1 = np.vstack([distance[index] for index in sorted(idx1)])
+    bathy_rev = np.interp(distance.flatten(),  x1.flatten(), bathy1.flatten())
+
+    plt.subplot(222)
+    if len(distance) == N2_grid.shape[0]:
+        x2 = np.tile(distance, (1, N2_grid.shape[1]))
+    else:    
+        x2 = np.tile(distance[:-1], (1, N2_grid.shape[1]))
+    plt.contourf(x2, p_grid, np.log10(np.abs(N2_grid)),
+                            cmap=cmocean.cm.tempo)
+    c1 = plt.colorbar()
+    c1.set_label('Log10 (N2)')
+    plt.plot(distance, results['z'], c=lc, linewidth=lw)
+    plt.fill_between(distance.flatten(), bathy_rev.flatten(), 6000,
+                     facecolor='#606060')
+
+    plt.scatter(distance[0], results['z'][0],
+                                     marker='*', c='#00ff32', s=ms)
+    plt.scatter(distance[-1], results['z'][-1],
+                marker='*', c='r', s=ms)
+
+    plt.xlabel('Distance Traveled (km)')
+    plt.ylabel('Depth (m)')
+    plt.title('Depth vs. Distance')
+    plt.gca().invert_yaxis()
+
+    plt.subplot(223)
+    plt.plot(results['elapsed_time']/3600, np.log10(np.abs(results['m'])),
+                                c=lc, linewidth=lw)
+    plt.gca().format_xdata = mdates.DateFormatter('%h')
+    plt.xlabel('Time (Hours)')
+    plt.ylabel('log (m)')
+    plt.title(' Vertical Wavenumber vs. Time')
+
+    plt.subplot(224)
+    plt.plot(results['elapsed_time']/3600, np.log10(np.abs(results['omega'])),
+                    c=lc, linewidth=lw, label=r'$\omega$')
+    plt.plot(results['elapsed_time'] / 3600, np.log10(np.abs(f)),
+                    c='k', linewidth=lw, label='f')
+    plt.legend()
+    plt.xlabel('Time (Hours)')
+    plt.ylabel(r'log ($\omega$)')
+    plt.title(' Frequency vs. Time')
+
+    title = """
+        Ray Tracing Results: Runtime = {} hours 
+
+        Initial Parameters (Observed)
+        k0 = {}, l0 = {}, m0 = {}, w0 = {}  
+        """.format(
+            np.abs(results['elapsed_time'][-1] / 3600),
+            results['k'][0], results['l'][0],
+            results['m'][0], results['omega'][0]
+            ).strip('[]')
+
+    plt.suptitle(title, size=16)
+    plt.tight_layout()
+    fig.subplots_adjust(top=0.8)
+
+                        
+
+    return fig
 
 def testing():
     """
