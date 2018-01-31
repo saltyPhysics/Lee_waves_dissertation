@@ -681,9 +681,9 @@ def run_tracing(wave, satGEM, time_direction='reverse',
             print('Wave hit surface')
             break
 
-        # if np.abs(Omega) < np.abs(f):
-        #     print('Wave Frequency below inertial Frequency')
-        #     break
+        if np.abs(Omega) < np.abs(f*1):
+            print('Wave Frequency below inertial Frequency')
+            break
         
         if status:
             print('\r{} % done'.format(100*(i/len(time))))
@@ -928,16 +928,17 @@ def dashboard(results, gem, lc='#ff3f02',
 
     title = """
         Ray Tracing Results: Runtime = {} hours 
-
+        Time Step: {} Seconds
         Initial Parameters (Observed)
         k0 = {}, l0 = {}, m0 = {}, w0 = {}  
         """.format(
             np.abs(results['elapsed_time'][-1] / 3600),
+            np.nanmean(np.abs(np.diff(results['elapsed_time'].flatten()))),
             results['k'][0], results['l'][0],
             results['m'][0], results['omega'][0]
             ).strip('[]')
 
-    plt.suptitle(title, size=16)
+    plt.suptitle(title, size=16, fontweight='bold')
     plt.tight_layout()
     fig.subplots_adjust(top=0.8)
 
