@@ -1,10 +1,8 @@
 """
 Author: Manish Devana
-Date: December 31, 2017
 
-Ray Tracing functions for internal waves
+Ray tracing using satGEM fields
 
-The goal is to use an object oriented approach to a ray tracing model.
 CURRENT STATUS:
 load in satGEM data and rewrite functions to remove all assumptions and run in a 4d field. 
 
