@@ -23,8 +23,6 @@ import pandas as pd
 import gsw
 import oceans as oc
 import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
-from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.colors as colors
 import matplotlib.dates as mdates
 import cmocean
@@ -105,7 +103,7 @@ def CGx(N2, Omega, k, l, m, u, f):
     N2: Buoyancy Frequency Squared
     Omega: intrinsic wave frequency
     k: zonal wavenumber
-    l: meridional wavenumber
+    l: meridional wavenumber 
     m: vertical wavenumber
     u: zonal flow speed
     f: coriolis parameter
