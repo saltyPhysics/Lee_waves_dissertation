@@ -6,6 +6,11 @@ Ray Tracing functions for internal waves
 
 The goal is to use an object oriented approach to a ray tracing model.
 CURRENT STATUS:
+load in satGEM data and rewrite functions to remove all assumptions and run in a 4d field. 
+
+- Figure out how to make k and l and m vary in all 4 dimensions (x,y,z, and t)
+
+
 
 """
 
@@ -32,6 +37,10 @@ Ray Tracing Instructions:
 1. Generate a "wave" object : rt.wave(inputs)
     - enter wave frequency, horizontal and vertical wavenumbner components, and initial depth
     - view properties to check if things were entered correctly
+
+satGEM Details
+--------------
+\t This ray tracing model utlizes the 4D velocity and density field constructed by Dr. Andrew Meijers. Full details are available in Meijers 2013. 
     '''
 
     print(text)
@@ -39,7 +48,7 @@ Ray Tracing Instructions:
 
 def wavenumbers(lam_k, lam_l, lam_m):
     """
-    Returns wavenumbers from wavelengths
+    Returns wavenumbers from wavelengths 
     """
     k = (2*np.pi)/lam_k/1000
     l = (2*np.pi)/lam_l/1000
@@ -100,22 +109,7 @@ class wave(object):
     - plotting and saving rays
     - HOPEFULLY: built in gui
     """
-    lat = 55.0
-    N2 = np.genfromtxt('ref_N2_b.txt')
-    N2_grid = np.squeeze(np.genfromtxt('N2_pgrid.csv',delimiter=','))
-    flow = np.genfromtxt('flow.txt')
-    U = flow[:,0]
-    V = flow[:,1]
-    flow_grid = np.genfromtxt('flow_grid.txt')
 
-    U = oc.vert_polyFit2(U, flow_grid, 100, deg=2)
-    V = oc.vert_polyFit2(V, flow_grid, 100, deg=2)
-
-    dudz = np.gradient(U)/np.gradient(flow_grid)
-    dudz = oc.vert_polyFit2(dudz, flow_grid, 100, deg=2)
-
-    dvdz = np.gradient(V)/np.gradient(flow_grid)
-    dvdz = oc.vert_polyFit2(dvdz, flow_grid, 100, deg=2)
     # Add functionality for a default Buoyancy Frequncy and Velocity Profile
 
     def __init__(self, k=10*1000, l=10*1000, m=500, w0=8e-4, z0=500):
@@ -132,14 +126,15 @@ class wave(object):
         self.y_init = np.array([0], dtype='float')
         self.z_init = np.array([z0], dtype='float')
 
-    def add_all_fields(self, U, V, N2, rho):
-        """
-        Allows user to add buoyancy, velocity, and density fields
-        """
-        self.U = U
-        self.V = V
-        self.N2 = N2
-        self.rho = rho
+        # These are empty for now- they get filled in during model runs. 
+        self.x_all = []
+        self.y_all = []
+        self.z_all = []
+        self.m_all = []
+        self.w0_all = []
+        self.E_all = []
+        self.Ac_all = []
+
 
     def help(self):
         """
@@ -182,219 +177,23 @@ m = {}
 '''.format(np.array2string(self.k_init), self.l_init, self.m_init, self.kh_init, self.w0_init)
 
         print(txt)
-
-    def forward2d(steady_state=True):
-        """
-        Time forward 2d modelling with option for steady state or time evolving
-        fields.
-        """
-
-
-    def back2d():
-        """
-        Time reverese 2d modelling
-        """
-
-
-
-    def back3d(self, duration=24, tstep=5,
-                    steady_state=True, status=2, seafloor=4000,
-                    print_run_report=False, updates=False):
-        """
-        Time forward 2d modelliing
-        """
-
-        tstep = float(tstep)
-        duration = duration*60*60 # Convert to seconds
-        time = np.arange(0, duration, tstep) # time grid for model run
-        status = status*60*60
-        f = gsw.f(self.lat)
-
-
-
-
-
-
-
-
-
-        while steady_state:
-            self.x_all = []
-            self.y_all = []
-            self.z_all = []
-            self.m_all = []
-            z = self.z_init[:]
-            x = self.x_init[:]
-            y = self.y_init[:]
-
-
-            w0 = self.w0_init[:]
-            m = self.m_init[:]
-            k = self.k_init[:]
-            l = self.l_init[:]
-            kh = self.kh_init[:]
-
-
-
-            bottom = 'NO'
-            for t in range(len(time)):
-                idx = np.nanargmin(np.abs(z - self.flow_grid))
-                idx2 = np.nanargmin(np.abs(z - self.N2_grid))
-
-                x = x - (cgx(self.N2[idx2], w0, k,\
-                              kh, m) + self.U[idx])*tstep
-
-
-
-                if not np.isfinite(x):
-                    error = self.model_error_message(x, y, z, m, idx, idx2)
-                    print(' X Error' + error)
-                    break
-
-                y = y - (cgy(self.N2[idx2], w0, l,\
-                              kh, m)+ self.V[idx])*tstep
-
-                if not np.isfinite(y):
-                    error = self.model_error_message(x, y, z, m, idx, idx2)
-                    print(' Y Error' + error)
-                    break
-
-                z = z + cgz(w0, f, kh, m)*tstep
-
-                if not np.isfinite(z):
-                    error = self.model_error_message(x, y, z, m, idx, idx2)
-                    print(' X Error' + error)
-                    break
-
-
-                if z >= seafloor:
-                    print('Wave ray hit seafloor')
-                    bottom = 'YES'
-                    break
-
-
-                m = m - -1*(k*self.dudz[idx] + l*self.dvdz[idx])*tstep
-
-
-                if not np.isfinite(z):
-                    print('Error')
-                    break
-
-                self.x_all.append(x)
-                self.y_all.append(y)
-                self.z_all.append(z)
-                self.m_all.append(m)
-                if time[t] % status == 0 and updates:
-                    print("Progress: {} %".format(int(100
-                                        * time[t] / duration )))
-
-
-            self.x_ray = np.vstack(self.x_all)/1000 # Convert to Kilometers
-            self.y_ray = np.vstack(self.y_all)/1000 # Convert to Kilometers
-
-            self.z_ray = np.vstack(self.z_all)
-            self.m_ray = np.vstack(self.m_all)
-            self.bottom = bottom
-            if updates:
-                print('Run Complete!')
-            Run_report = '''
-Ray Tracing Report:
--------------------
-X-Distance: {} km
-Y-Distance: {} km
-Z-Distance: {} m
-Duration: {} seconds
-Time Step: {} seconds
-Hit Sea Floor : {}
-'''.format(self.x_ray[-1], self.y_ray[-1],
-self.z_ray[-1], duration, tstep, bottom)
-            self.run_report = Run_report
-
-            if print_run_report:
-                print(Run_report)
-            steady_state = False
-            self.seafloor = seafloor
-
-    def plot(self, fig=None):
-        """
-        Plot the current ray trace results
-        """
-
-        if not fig:
-            plt.figure(figsize=[6,6])
-        else:
-            plt.figure(fig.number)
-
-        plt.plot(np.sqrt(self.x_ray**2 + self.y_ray**2), self.z_ray)
-        plt.gca().invert_yaxis()
-        plt.show()
-
-    def plot_flow_x(self, fig=None):
-
-
-        if not fig:
-            plt.figure(figsize=[6,6])
-        else:
-            plt.figure(fig.number)
-
-        plt.plot(self.x_ray, self.z_ray)
-
-        plt.xlim(self.x_ray.min(), self.x_ray.max())
-        plt.ylim(0, self.seafloor)
-        plt.gca().invert_yaxis()
-
-    def x_m_plot(self, fig=None, contour=True,
-                 cmap='reds', linenorm=None,
-                 line_colorbar=False):
-
-
-        if not fig:
-            plt.figure(figsize=[6,6])
-        else:
-            plt.figure(fig.number)
-
-        if contour:
-            _, Ugrid = np.meshgrid(self.x_ray, self.U)
-            cp = plt.contourf(self.x_ray.flatten(),
-                              self.flow_grid, Ugrid,
-                              cmap=cmocean.cm.speed)
-            cb1 = plt.colorbar(cp)
-
-        axs = plt.gca()
-        if linenorm:
-            linenorm = plt.Normalize(np.nanmin(self.m_ray),
-                             np.nanmax(self.m_ray))
-
-
-
-        self.lc = oc.colorline(self.x_ray.flatten(),
-                          self.z_ray.flatten(),
-                          z=np.abs(self.m_ray.flatten()),
-                          norm=linenorm, cmap=cmap)
-        plt.xlim(self.x_ray.min(), self.x_ray.max())
-        plt.ylim(0, self.seafloor)
-        if line_colorbar:
-
-            cb2 = plt.colorbar(self.lc, extend='max')
-
-        plt.gca().invert_yaxis()
-
-    def backward3d(self, duration=24, tstep=5, steady_state=True,status=2,
+  
+    def back_trace(self, duration=24, tstep=5,status=2,
                    seafloor=4000, print_run_report=False, updates=False):
         """
-        ADD DOCS FOR THIS!!
-        Copy of back3d but with depth varying intrinsic frequency and wave
-        action added.
+        3 dimensional ray tracing within the time evolving satGEM density and velocity fields
+
 
         Parameters
         ----------
-        duration:
-        tstep:
-        steady_state
+        duration:  Run duration (in hours)
+        tstep: time step of model in seconds
         status:
-        seafloor:
+        seafloor: choose a seafloor depth in meters (maybe integrate bathymetry at some point using gebco data)
         
-
+        
+        Returns
+        -------
         """
 
         # Set up model run
@@ -406,13 +205,7 @@ self.z_ray[-1], duration, tstep, bottom)
 
         # Run model
         while steady_state:
-            self.x_all = []
-            self.y_all = []
-            self.z_all = []
-            self.m_all = []
-            self.w0_all = []
-            self.E_all = []
-            self.Ac_all = []
+
             z = self.z_init[:]
             x = self.x_init[:]
             y = self.y_init[:]
@@ -528,22 +321,10 @@ self.z_ray[-1], duration, tstep, bottom)
 
 
 
-    def satgem_back(self, duration=48, tstep=5):
-        """
-        Run model using satGEM velocity and buoyancy fields. 
+
         
-        Integration of satGEM fields allows for full 4 dimensional analysis
-        so all parameters can vary in space and time in realistic local 
-        conditions. 
-        """
         
-
-
-    def save_run(self, fname=None):
-
-        if not fname:
-            fname = 'ray_trace.csv'
-            np.savetxt(fname)
+        
 
 
 

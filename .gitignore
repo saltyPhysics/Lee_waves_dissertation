@@ -55,6 +55,8 @@ coverage.xml
 *.png
 *.csl
 *.bib
+*.pdf
+*.nc
 
 
 # Translations
