@@ -1,6 +1,5 @@
 """
 Author: Manish Devana
-Date: December 31, 2017
 
 Ray Tracing functions for internal waves with satGEM T,S,u,and v fields
 
