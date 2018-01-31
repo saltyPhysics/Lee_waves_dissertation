@@ -10,4 +10,9 @@ in the Southern Ocean past an island pack Shag Rocks.
 
 * Internal Wave Calculation functions - https://github.com/saltyPhysics/Lee_waves_dissertation/blob/master/internal_waves_calculations.py
 
+* Ray Tracing Docs: see ray tracing branch (not complete for merging with master yet 
+
 * General Oceanographic Tools - https://github.com/saltyPhysics/Lee_waves_dissertation/blob/master/oceans.py
+
+
+
