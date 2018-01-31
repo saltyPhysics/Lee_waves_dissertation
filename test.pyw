@@ -73,48 +73,32 @@ def CGz(Omega, k, l, m, f, N2, w=0):
     """
     Vertical Group Speed (includes vertical flow but is 0 by default)
 
-    Parameters
+    Paramaters
     ----------
-    Omega: intrinsic wave frequency
-    k: zonal wavenumber
-    l: meridional wavenumber
-    m: vertical wavenumber
-    f: coriolis parameter
-    N2: Buoyancy Frequency Squared
-    w: vertical flow speed (default=0 because it is not available in satGEM)
+
+
 
     Returns
     -------
-    cgz: Vertical Group Speed (m/s)
+
 
     """
     K2 = k**2 + l**2 + m**2
 
-    cgz = (-1 * (k**2 + l**2) * m * (N2 - f**2)) / (K2**2 * Omega)
-
-    return cgz
-
+    return (-1*(k**2 + l**2) * m * (N2 - f**2)) / (K2**2 * Omega)
 
 
 def CGx(N2, Omega, k, l, m, u, f):
     """
-    Horizontal group speed in x-direction
+    Horizontal group speed in x-direction in a flow
 
-    Parameters
+    Paramaters
     ----------
-    N2: Buoyancy Frequency Squared
-    Omega: intrinsic wave frequency
-    k: zonal wavenumber
-    l: meridional wavenumber
-    m: vertical wavenumber
-    u: zonal flow speed
-    f: coriolis parameter
+
+
 
     Returns
     -------
-    cgx: Horizontal (x) Group Speed (m/s)
-
-
     """
 #    K2 = k**2 + l**2 + m**2
     
@@ -127,22 +111,14 @@ def CGy(N2, Omega, k, l, m, v, f):
     """
     Horizontal group speed in y-direction in a flow
 
-    Parameters
+    Paramaters
     ----------
-    N2: Buoyancy Frequency Squared
-    Omega: intrinsic wave frequency
-    k: zonal wavenumber
-    l: meridional wavenumber
-    m: vertical wavenumber
-    v: meridional flow speed
-    f: coriolis parameter
+
+
 
     Returns
     -------
-    cgy: Horizontal (y) Group Speed (m/s)
-
     """
-
     K2 = k**2 + l**2 + m**2
     
     cgy = (l * m**2 * (N2 - f**2))/(K2**2 * Omega) + v
@@ -154,8 +130,8 @@ def EoZ(N2, w0, f, ):
     """
     Wave ray energy when variations can only occur in the vertical (i.e. N2 and
     flow only vary with depth not horizontally) - Olbers 1981
-    INCOMPLETE-----------
-    Parameters
+
+    Paramaters
     ----------
 
 
@@ -170,50 +146,33 @@ def EoZ(N2, w0, f, ):
 
 def refraction(N, k, l, m, dN, di, Omega):
     """
-    Refraction index of internal wave through stratification 
+    Refraction index of internal wave
 
-    Parameters
+    Paramaters
     ----------
-    N: Buoyancy Frequency
-    
-    k: zonal wavenumber
-    l: meridional wavenumber
-    m: vertical wavenumber
-    u: zonal flow speed
-    f: coriolis parameter
-    Omega: intrinsic wave frequency
+
+
 
     Returns
     -------
-    ri: refraction index for a single direction (x, y, or z)
 
     """
-
     K = k**2 + l**2 + m**2
-    ri = ((N * (k**2 + l**2)) / (K * Omega)) * (dN / di)
-
-    return ri
+    
+    return ((N*(k**2 + l**2)) / (K * Omega)) * (dN/di)
     
     
 def dk(dU, dV,dx, k, l , m, dN, N, Omega):
     """
     Change of zonal wavenumber k in time
 
-    Parameters
+    Paramaters
     ----------
-    dU: change in U (zonal velocity)
-    dV: change in V (meridional velocity)
-    dx: x change (meters)
-    k: zonal wavenumber
-    l: meridional wavenumber
-    m: vertical wavenumber
-    dN: change in buoyancy frequency
-    N: Buoyancy frequency
-    Omega: Intrinsic frequency
+
+
 
     Returns
     -------
-    dk: Change in zonal wavenumber k
 
     """
     ri = refraction(N, k, l, m, dN, dx, Omega)
@@ -227,21 +186,13 @@ def dl(dU, dV, dy, k, l, m, dN, N, Omega):
     """
     Change of meridional wavenumber l in time
 
-    Parameters
+    Paramaters
     ----------
-    dU: change in U (zonal velocity)
-    dV: change in V (meridional velocity)
-    dy: y change (meters)
-    k: zonal wavenumber
-    l: meridional wavenumber
-    m: vertical wavenumber
-    dN: change in buoyancy frequency
-    N: Buoyancy frequency
-    Omega: Intrinsic frequency
+
+
 
     Returns
     -------
-    dl: Change in meridional wavenumber l
 
     """
     ri = refraction(N, k, l, m, dN, dy, Omega)
@@ -255,21 +206,13 @@ def dm(dU, dV, dz, k, l, m, dN, N, Omega):
     """
     Change of vertical wavenumber l in time
 
-    Parameters
+    Paramaters
     ----------
-    dU: change in U (zonal velocity)
-    dV: change in V (meridional velocity)
-    dz: z change (meters)
-    k: zonal wavenumber
-    l: meridional wavenumber
-    m: vertical wavenumber
-    dN: change in buoyancy frequency
-    N: Buoyancy frequency
-    Omega: Intrinsic frequency
+
+
 
     Returns
     -------
-    dm: Change in vertical wavenumber m
 
     """
     ri = refraction(N, k, l, m, dN, dz, Omega)
@@ -285,17 +228,13 @@ def dOmega(rx, ry, rz, k, l, dU, dV):
 
     Paramaters
     ----------
-    rx: wave refraction in x direction
-    ry: wave refraction in y direction
-    rz: wave refraction in z direction
-    k: zonal wavenumber
-    l: meridional wavenumber
-    dU: change in U (zonal velocity)
-    dV: change in V (meridional velocity)
+
+
 
     Returns
     -------
-    dW: Change in frequency
+
+
 
     """
 
@@ -351,16 +290,18 @@ def inverse_hav(x, y, lon1, lat1):
 
 class Wave(object):
     """
-    Stores features of a wave as an object which can be input into 
-    the ray tracing function
- 
+    Creates a wave which has varying functionality including:
+    - time forward modelling
+    - time reverse modelling
+    - variable velocity and density field inputs
+    - plotting and saving rays
+    - HOPEFULLY: built in gui
     """
 
     # Add functionality for a default Buoyancy Frequncy and Velocity Profile
 
-    def __init__(self, k=(2*np.pi)/1000, l=(2*np.pi)/1000, 
-                        t0=datetime(2012, 11, 2, 3, 0, 0),
-                        m=500, w0=-1.3e-4, z0=500, lat=-55, lon=-55):
+    def __init__(self, k=10*1000, l=10*1000, t0=datetime(2012, 11, 2, 3, 0, 0),
+                 m=500, w0=-1.3e-4, z0=500, lat=-55, lon=-55):
 
         # Convert wavelengths into wavenumbers
         # Save initial values becuase running the model will change
@@ -375,6 +316,14 @@ class Wave(object):
         self.lon0 = np.array([lon], dtype='float')
         self.t0 = t0
 
+        # These are empty for now- they get filled in during model runs. 
+        self.x_all = []
+        self.y_all = []
+        self.z_all = []
+        self.m_all = []
+        self.w0_all = []
+        self.E_all = []
+        self.Ac_all = []
 
 
     def help(self):
@@ -383,10 +332,26 @@ class Wave(object):
         """
         text = '''
 Instructions for using ray tracing model.
-\nGenerate a wave with chosen properties or use the default Parameters
+\nGenerate a wave with chosen properties or use the defualt Parameters
 '''
         print(text)
 
+
+    def model_error_message(self, x, y, z, m, idx, idx2):
+        error_message = '''
+        current variables:
+-----------------
+x = {}
+y = {}
+z = {}
+N2 = {}
+U = {}
+V = {}
+m = {}
+'''.format(x, y, z,
+ self.N2[idx2], self.U[idx], self.V[idx], m)
+
+        return error_message
 
     def properties(self):
         """
@@ -409,12 +374,11 @@ Instructions for using ray tracing model.
 
 class satGEM_field(object):
     """
-    load in the satGEM data as an object (this might be wierd though because the h5py module loads in each file as an object so not sure...)
+    load in the satGEM data as an object (this might be wierd though becuase the h5py module loads in each file as an object so not sure...)
     
     The objects built in functions can then be used to easily access the data set without ever having to load the whole thing in.
     
-    Also Contains bathymetry data from GEBCO which is also stored as an object
-    rather than loaded in all at once. 
+    Also Contains bathymetry data
     
     """
 
@@ -445,8 +409,7 @@ class satGEM_field(object):
         self.centerlon = vel_file['centerlon']
         
         ###################################
-        # Bathymetry file 
-        # access bathy data like a dictionary with keys: elevation, lat, lon
+        # Bathymetry file
         self.bathy = Dataset('bathy.nc')
        
         
@@ -469,7 +432,7 @@ class satGEM_field(object):
         depth_id: index along latitude axis
         time_id: index along time axis
 
-        These are for the velocity grids which are offset
+        These are for the velocity grids
         centerlon_id: index along centerlon axis
         centerlat_id: index along centerlat axis
 
@@ -492,9 +455,7 @@ class satGEM_field(object):
     def subgrid(self, lon_c, lat_c, z_c, time_c, k0, l0, m0,
                 x_pads=2, y_pads=2, z_pads=2, t_pads=1):
         """
-        Generate a sub grid around a chosen point and interpolate to get better resolution in space and time than satGEM
-        INCOMPLETE --- need to add the interpolation
-        - right now it returns the indicies of the subgrid
+        Generate a sub grid around a chosen point and return the indices of that grid
         """
 
         x_pad = (2 * ((x_pads * np.pi) / k0))  # pad with 2x wavelength on that axis
@@ -524,49 +485,16 @@ class satGEM_field(object):
 
 
 
-def run_tracing(wave, satGEM, time_direction='forward', 
-                duration=24, tstep=10, status=False):
+
+
+
+
+def run_tracing(wave, satGEM, time_direction='reverse', 
+                duration=24, tstep=10, status=True):
     """
     Runs ray tracing using the wave 
     objects and gem field objects with option for
     forward and backwards time finite differenceing steps. 
-
-    Parameters
-    ----------
-    wave: Wave object with all initial wave
-        features(i.e. wavenumbers, frequency, starting position)
-    satGEM: satGEM object for accessing satGEM and bathymetry data
-    time_direction: Direction in time to run ray tracing
-                    ('reverse' or 'forward')
-    duration: duration to run ray tracing (HOURS)
-    tstep: time step (SECONDS)
-    status: gives status updates (keep False unless you want a million messages)
-
-    Returns
-    -------
-    wave.results: stores all results into a dictionary attached to 
-        the initial wave object as 1D arrays
-    
-    results keys:
-        x: x distance (meters) 
-        y: y distance (meters)
-        z: z distance (meters)
-        k: zonal wavenumber
-        l: meridional wavenumber
-        m: vertical wavenumber
-        omega: wave frequency
-        lat: wave's latitude
-        lon: wave's longitude
-        cgx: horizontal (x direction) group speed
-        cgy: horizontal (y direction) group speed
-        cgz: vertical group speed
-        bathy: bathymetry below wave
-        N2: Buoyancy frequency along wave path
-        N2_grid: pressure grid corresponding to N2
-        time: time vector as datetime type
-        elapsed_time: time vector as seconds elapsed 
-
-
     """
 
     if not isinstance(wave, Wave):
@@ -652,10 +580,10 @@ def run_tracing(wave, satGEM, time_direction='forward',
                               satGEM.temp[lon_idx, lat_idx, :, t_idx],
                               satGEM.depth_grid[:,:].flatten(),lat[:],
                               axis=-1)
-
         N2_all.append(N2_vert.flatten())
         N2_grid.append(p_grid.flatten())
-
+        # REMOVE THIS WHEN DONE!!!
+        # plt.plot(p_grid, N2_vert)
 
         idx_n = np.argmin(np.abs(p_grid.flatten() - z))
         N2 = N2_vert.flatten()[idx_n]
@@ -717,12 +645,12 @@ def run_tracing(wave, satGEM, time_direction='forward',
             break
         
         
-        # Finite differencing 
-
         # X step
         dx = tstep * CGx(N2, Omega, k, l, m, u, f)
         x  = x + dx # use this form instead of x+= because it modifies old values
-    
+#        print(np.sqrt(u**2 + v**2))
+
+#        print('x step: {}'.format(dx))
         
         # Y step
         dy = tstep * CGy(N2, Omega, k, l, m, v, f)
@@ -731,6 +659,7 @@ def run_tracing(wave, satGEM, time_direction='forward',
         # Z step
         dz = tstep * CGz(Omega, k, l, m, f, N2)
         z = z + dz
+        
         
         # New position
         lon2, lat2 = inverse_hav(dx, dy, lon, lat)
@@ -778,13 +707,14 @@ def run_tracing(wave, satGEM, time_direction='forward',
         Omega = Omega + dOmega(rx, ry, rz, k, l, du, dv)
 
         
-        # Update position
+        # boundary checks
+        
         lon = lon2 
         lat = lat2
         
-        # find nearest location in bathymetry grid
         idx1 = np.argmin(np.abs(lon - satGEM.bathy['lon'][:]))
         idx2 = np.argmin(np.abs(lat - satGEM.bathy['lat'][:]))
+        
         bottom = -1*satGEM.bathy['elevation'][idx2, idx1]
         
         
@@ -816,16 +746,12 @@ def run_tracing(wave, satGEM, time_direction='forward',
             print('Wave Frequency below inertial Frequency')
             break
         
-        # Keep as false it prints a million messages
         if status:
             print('\r{} % done'.format(100*(i/len(time))))
-
-    # After ray tracing loop
 
     # store all results in dictionary (keeps things concise when using)
     elapsed_time = np.vstack([(timeIn - time[0]).total_seconds() 
                     for timeIn in time[:i + 2]])
-
     results = {
             'x': np.vstack(x_all),
             'y': np.vstack(y_all),
@@ -841,10 +767,7 @@ def run_tracing(wave, satGEM, time_direction='forward',
 
     }
     
-    distance = 1e-3 * np.sqrt(results['x']**2 + results['y']**2)
-    results['distance'] = distance
-
-    # Had to add this condition for when the run quits out on first step
+    
     if bathy:
         results['bathy'] = np.vstack(bathy)
         results['cgx'] = np.vstack(cgx)
@@ -858,30 +781,86 @@ def run_tracing(wave, satGEM, time_direction='forward',
     results['N2'] = N2_all
     results['N2_grid'] = N2_grid
     
-    summary = """
-Ray Tracing Summary
--------------------
-Duration: {} hours
-Time Step: {} seconds
-Distance Traveled: {} km
-Time Direction: {} 
-""".format(
-    duration,
-    tstep,
-    distance[-1],
-    time_direction
-).strip('[]')
-
-    results['summary'] = summary
-
-    # Store results onto wave object (just to see if this works for now)
-    wave.results = results
+    return results
 
 
 
+def plot_tracing(results, gem, plot_satgem=True):
+    """
+    standard plotting function for viewing ray tracing results
+    """
+    
+    if not isinstance(gem, satGEM_field):
+        raise ValueError('satGEM input must be a satGEM field object')
+        
+    
+
+    
+    fig1 = plt.figure(figsize = (15,8))
+    plt.subplot(421)
+    plt.plot(results['x'], -results['z'])
+    plt.title('x vs z')
+    
+    plt.subplot(422)
+    plt.plot(results['time'], -results['z'])
+    plt.title('time vs z')
+    
+    plt.subplot(423)
+    plt.plot(results['time'], np.sqrt(results['x']**2 + results['y']**2))
+    plt.title('time vs dist')
+    
+    plt.subplot(425)
+    buffer = 0.2
+    latlims = np.array([np.nanmin(results['lat'])-buffer, np.nanmax(results['lat'])+buffer])
+    latlims = [np.argmin(np.abs(lat_in - gem.bathy['lat'][:])) for lat_in in latlims]
+    latlims = np.arange(latlims[0], latlims[1])
+    
+    lonlims = np.array([np.nanmin(results['lon'])-buffer, np.nanmax(results['lon'])+buffer])
+    lonlims = [np.argmin(np.abs(lon_in - gem.bathy['lon'][:])) for lon_in in lonlims]
+    lonlims = np.arange(lonlims[0], lonlims[1])
+
+    bathy_rev = gem.bathy['elevation'][latlims, lonlims]
+    lat_b = gem.bathy['lat'][latlims]
+    lon_b = gem.bathy['lon'][lonlims]
+    plt.plot(results['lon'], results['lat'])
+    
+    plt.pcolormesh(lon_b, lat_b, bathy_rev)
+    plt.title('lon vs lat')
+ 
+    plt.subplot(426)
+    plt.plot(results['elapsed_time'], np.log10(np.abs(results['k'])))
+    plt.title('time vs log10(k)')
+    
+    plt.subplot(427)
+    plt.plot(results['elapsed_time'], np.log10(np.abs(results['m'])))
+    plt.title('time vs log10(m)')
+    
+    plt.subplot(428)
+    plt.plot(np.log10(np.abs(results['k'])), np.log10(np.abs(results['m'])))
+    plt.title('log k vs  log m')
+    
+    
+    plt.tight_layout()
+   
 
 
-def plot_results(results, gem, lc='#ff3f02',
+    plt.figure(figsize=(8,8))
+    
+    plt.pcolormesh(lon_b, lat_b, bathy_rev)
+    plt.contour(lon_b, lat_b, bathy_rev, colors='k')
+    plt.plot(results['lon'], results['lat'], c='r')
+    plt.title('lon vs lat')
+    
+    
+    plt.figure(figsize=(8,8))
+    
+    dist = np.sqrt(results['x']**2 + results['y']**2)
+    plt.plot(dist, results['z'], c='r')
+    plt.plot(dist[:-1], results['bathy'], c='k')
+    plt.title('transect ')
+ 
+
+def dashboard(results, gem, lc='#ff3f02',
                 lw=1.5, ms=20, buffer=0.2, cls=20, plot_satgem=True):
     """
     Quick function for plotting a ray path over local bathymetry with
@@ -901,7 +880,32 @@ def plot_results(results, gem, lc='#ff3f02',
     f = gsw.f(results['lat'])
     N2_grid = results['N2']
     p_grid = results['N2_grid']
- 
+    # if plot_satgem:
+    #     # Get N2 field from satgem data for plotting in background
+    #     N2_grid = []
+    #     p_grid = []
+
+    #     for i in range(len(results['time'])):
+    #         lon_idx, lat_idx, z_idx,\
+    #             t_idx, clon_idx, clat_idx = gem.locate(results['lon'][i],
+    #                                                     results['lat'][i],
+    #                                                     results['z'][i],
+    #                                                     results['time'][i],
+    #             )
+
+    #         N2, p_mid = gsw.Nsquared(gem.sal[lon_idx, lat_idx, :, t_idx],
+    #                         gem.temp[lon_idx, lat_idx, :, t_idx],
+    #                         gem.depth_grid[:, 0],
+    #                         axis=-1)
+
+    #         N2_grid.append(N2)
+    #         p_grid.append(p_mid)
+            
+    #     N2_grid = np.vstack(N2_grid)
+    #     p_grid = np.vstack(p_grid)
+        
+
+
 
     latlims = np.array([np.nanmin(results['lat']) - buffer,
                         np.nanmax(results['lat']) + buffer])
@@ -1005,21 +1009,21 @@ def plot_results(results, gem, lc='#ff3f02',
 
 def testing():
     """
-    variables used for testing ray tracing (taken from transect observations)
+    Random variables used for testing ray tracing
     
     """
     
-    towyo_date = datetime(2012, 2, 28, 21, 33, 44)
-    gem = rt.satGEM_field()
-    k0 = 0.000379449
-    l0 = -0.000395896
-    m0 = -0.0062492
-    w0 = -0.00014730
-    wave = Wave(k=k0, l=l0, m=m0, w0=w0, z0=1500, t0=towyo_date,
-                lat=lat[:, 5], lon=lon[:, 5]
-                )
-
-    run_tracing(wave, gem, duration=24, tstep=30, time_direction='reverse')
+    k =  0.000403364
+    l = -0.000173485
+    m = -0.01256
+    w0 = -0.00014848
     
-  
+    towyo_date =  datetime(2012,	2,	28,	21,	33,	44)
+    
+    gem = satGEM_field()
+    wave = Wave(k=k, l=l, m=m, w0=w0, t0=towyo_date)
+    
+    results = run_tracing(wave, gem, duration=10*24, tstep=30, time_direction='reverse')
+    
+    plot_tracing(results, gem)
     
