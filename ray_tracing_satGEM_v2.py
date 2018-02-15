@@ -16,20 +16,16 @@ load in satGEM data and rewrite functions to remove all assumptions and run in a
 
 
 import numpy as np
-import scipy
-
-import pandas as pd
 import gsw
 import oceans as oc
 import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 import matplotlib.dates as mdates
-import cmocean
 import h5py
 from datetime import datetime, timedelta
 from netCDF4 import Dataset
-from scipy.interpolate import Rbf
-from Intergrid import Intergrid
+from scipy.interpolate import Rbf, LinearNDInterpolator, interp2d, NearestNDInterpolator
+from mpl_toolkits.mplot3d import Axes3D
+
 
 
 
@@ -383,7 +379,13 @@ def inverse_hav(x, y, lon1, lat1):
     return lon2, lat2 # in degrees
 
 
-
+def generate_rbf():
+    """
+    function for generating radial basis function within satgem fields
+    using scipy's existing rbf function
+    """
+    
+    
 
 class Wave(object):
     """
@@ -558,13 +560,21 @@ class satGEM_mini(object):
         return lon_id, lat_id, depth_id, time_id, clon_id, clat_id
 
 
-    def interpfield(self, lon, lat, depth, time,
+    def interpfield_rbf(self, lon, lat, depth, time,
                     lonpad=0.5, latpad=0.5, tpad=1,
                     function='linear'):
         """
         Generate 4D radial basis function for interpolating
         ray tracing points
         
+        Status: The ray tracing works welll until reaching the bottom of the 
+        satgem data where vertical group speed abruptly goes to zero.
+        This happens whether using linearND interpolator or the radial basis function
+        The best solution may be to fill the satgem datasets with a mean bottom 
+        value based on the last available value for each cast. 
+        
+        
+    
         """
         
         tpad  = timedelta(weeks=tpad)
@@ -605,6 +615,10 @@ class satGEM_mini(object):
 #                   function='linear')
         # order = [regular, dx, dy, dz, dt]
         names = ['Fn2', 'Fdndx', 'Fdndy', 'Fdndz']
+        n2temp = self.N2[lon_id1:lon_id2+1,
+                        lat_id1:lat_id2+1,
+                        :, time_id1:time_id2+1]
+        
         for i, grid in enumerate(self.ngrids):
             subgrid = grid[lon_id1:lon_id2+1,
                         lat_id1:lat_id2+1,
@@ -676,12 +690,171 @@ class satGEM_mini(object):
         lonlims = [np.nanmin(lonvec), np.nanmax(lonvec)]
         tlims = [np.nanmin(tvec), np.nanmax(tvec)]
         
+        # bathy interpolation function
+        lonid1 = np.argmin(np.abs((lon-lonpad) - self.bathy['lon'][:]))
+        lonid2 = np.argmin(np.abs((lon+lonpad) - self.bathy['lon'][:]))
+        
+        latid1 = np.argmin(np.abs((lat - latpad) - self.bathy['lat'][:]))
+        latid2 = np.argmin(np.abs((lat + latpad) - self.bathy['lat'][:]))
+        
+        lonvec = self.bathy['lon'][lonid1:lonid2+1]
+        latvec = self.bathy['lat'][latid1:latid2+1]
+        bathy_subgrid = self.bathy['elevation'][latid1:latid2+1,
+                                  lonid1:lonid2+1]
+        
+        
+        
+        F = interp2d(lonvec, latvec, bathy_subgrid, kind='cubic')
+            
+        setattr(self,'bathyF', F)
+        
+        
+        return lonlims, latlims, tlims
+    
+    def interpfield_lnd(self, lon, lat, depth, time,
+                    lonpad=0.5, latpad=0.5, tpad=1):
+        """
+        Generate 4D radial basis function for interpolating
+        ray tracing points
+        
+        """
+        
+        tpad  = timedelta(weeks=tpad)
+            
+        # get indices for center of interpolation field
+        lon_id1, lat_id1, depth_id1, time_id1, clon_id1, clat_id1 = \
+                    self._locate_variables(lon-lonpad,
+                                           lat-latpad,
+                                           depth,
+                                           time-tpad)
+        
+        lon_id2, lat_id2, depth_id2, time_id2, clon_id2, clat_id2 = \
+                    self._locate_variables(lon+lonpad,
+                                           lat+latpad,
+                                           depth,
+                                           time+tpad)
+        
+        # make subgrid
+        
+        lonvec = self.lon[lon_id1:lon_id2+1]
+        latvec = self.lat[lat_id1:lat_id2+1]
+        tvec = self.timevec[time_id1:time_id2+1]
+        
+        latmesh, lonmesh, dmesh, tmesh = np.meshgrid(latvec,
+                                             lonvec,
+                                             gem.N2grid[:],
+                                             tvec, sparse=False)
+
+
+        # order = [regular, dx, dy, dz, dt]
+        names = ['Fn2', 'Fdndx', 'Fdndy', 'Fdndz']
+
+        
+        for i, grid in enumerate(self.ngrids):
+            subgrid = grid[lon_id1:lon_id2+1,
+                        lat_id1:lat_id2+1,
+                        :, time_id1:time_id2+1]
+            
+            mask = ~np.isnan(subgrid)
+            points = np.vstack([lonmesh[mask],
+                                latmesh[mask],
+                                dmesh[mask],
+                                tmesh[mask]]).T
+            
+            F = NearestNDInterpolator(points,
+                   subgrid[mask], rescale=True)
+            
+            setattr(self,names[i], F)
+        
+        # U functions -  u uses centered latitude grid
+        latvec = self.centerlat[clat_id1:clat_id2+1]
+        latmesh, lonmesh, dmesh, tmesh = np.meshgrid(latvec,
+                                             lonvec,
+                                             gem.depth_grid[:],
+                                             tvec, sparse=False)
+        
+        names = ['Fu', 'Fdudx', 'Fdudy', 'Fdudz','Fdudt']
+        for i, grid in enumerate(self.ugrids):
+            subgrid = grid[lon_id1:lon_id2+1,
+                        lat_id1:lat_id2+1,
+                        :, time_id1:time_id2+1]
+            
+            mask = ~np.isnan(subgrid)
+            points = np.vstack([lonmesh[mask],
+                                latmesh[mask],
+                                dmesh[mask],
+                                tmesh[mask]]).T
+            
+            F = NearestNDInterpolator(points,
+                   subgrid[mask])
+            
+            setattr(self,names[i], F)
+            
+        # V functions -  u uses centered latitude grid
+        clonvec = self.centerlon[clon_id1:clon_id2+1]
+        
+        # remake lat vector
+        latvec = self.lat[lat_id1:lat_id2+1]
+        
+        latmesh, lonmesh, dmesh, tmesh = np.meshgrid(latvec,
+                                             clonvec,
+                                             gem.depth_grid[:],
+                                             tvec, sparse=False)
+        # create rbf functions for each paramater F(lon, lat, depth, time)
+        names = ['Fv', 'Fdvdx', 'Fdvdy', 'Fdvdz','Fdvdt']
+        for i, grid in enumerate(self.vgrids):
+            subgrid = grid[lon_id1:lon_id2+1,
+                        lat_id1:lat_id2+1,
+                        :, time_id1:time_id2+1]
+            
+            mask = ~np.isnan(subgrid)
+            points = np.vstack([lonmesh[mask],
+                                latmesh[mask],
+                                dmesh[mask],
+                                tmesh[mask]]).T
+            
+            F = NearestNDInterpolator(points,
+                   subgrid[mask])
+            
+            setattr(self,names[i], F)
+        
+        # return functions' boundaries 
+        latlims = [np.nanmin(latvec), np.nanmax(latvec)]
+        lonlims = [np.nanmin(lonvec), np.nanmax(lonvec)]
+        tlims = [np.nanmin(tvec), np.nanmax(tvec)]
+        
+        subgrid = self.N2[lon_id1:lon_id2+1,
+                        lat_id1:lat_id2+1,
+                        :, time_id1:time_id2+1]
+        
+        # create interpolation function for bathymetry
+        lonid1 = np.argmin(np.abs((lon-lonpad) - self.bathy['lon'][:]))
+        lonid2 = np.argmin(np.abs((lon+lonpad) - self.bathy['lon'][:]))
+        
+        latid1 = np.argmin(np.abs((lat - latpad) - self.bathy['lat'][:]))
+        latid2 = np.argmin(np.abs((lat + latpad) - self.bathy['lat'][:]))
+        
+        lonvec = self.bathy['lon'][lonid1:lonid2+1]
+        latvec = self.bathy['lat'][latid1:latid2+1]
+        bathy_subgrid = self.bathy['elevation'][latid1:latid2+1,
+                                  lonid1:lonid2+1]
+        
+        
+        
+        F = interp2d(lonvec, latvec, bathy_subgrid, kind='cubic')
+            
+        setattr(self,'bathyF', F)
+        
+        
+        
         
         return lonlims, latlims, tlims
     
 def ray_tracing_interp(wave, gem, time_direction='forward', 
                 duration=24, tstep=10,
                 latpad=1, lonpad=1, tpad=1,
+                extend_bathy = 10000,
+                interp_mode='lnd',
                 interp_function='linear'):
     """
     Ray tracing using the satGEM density and velocity fields with
@@ -736,6 +909,11 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
     u_all = []
     v_all = []
     N2_all = []
+    rx_all = []
+    ry_all = []
+    rz_all = []
+    dudz_all = []
+    dvdz_all = []
     
 #    N2_all = []
 #    N2_grid = []
@@ -770,11 +948,16 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
         
     time = np.arange(start_time, end_time,
                      timedelta(seconds=tstep)).astype(datetime) # create time vector (seconds)
-
-    lonlims, latlims, tlims = gem.interpfield(lon, lat,
+    N2subgrid=None
+    if interp_mode == 'rbf':
+        lonlims, latlims, tlims = gem.interpfield_rbf(lon, lat,
                                               z, time[0],
                                               function=interp_function)
-    
+    elif interp_mode == 'lnd':
+        lonlims, latlims, tlims = \
+                        gem.interpfield_lnd(lon, lat,
+                                            z, time[0],
+                                              )
 
     for i, t in enumerate(time[:-1]):
         
@@ -789,21 +972,37 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
         # if depth is greater than 3000 and wave hasnt hit bottomr
         # use 3000 (max range of parameter functions)
         # this is assuming that below 3000m values are constant 
-        if z >= 3000:
-            z1 = z
+        latid = np.argmin(np.abs(lat -  gem.lat))
+        lonid = np.argmin(np.abs(lon - gem.lon))
+        timeid = np.argmin(np.abs(gem.time[:] - t))
+        N2closest = gem.N2[lonid, latid, :, timeid]
+        gembottom = gem.depth_grid[np.max(np.where(np.isfinite(N2closest)))]
+        if z > gembottom:
+            z1 = gembottom
         else:
             z1 = z
         u = gem.Fu(lon, lat, z1, tnum)
         dudx = gem.Fdudx(lon, lat, z1, tnum)
+
         dudy = gem.Fdudy(lon, lat, z1, tnum)
         dudz = gem.Fdudz(lon, lat, z1, tnum)
         dudt = gem.Fdudt(lon, lat, z1, tnum)
+        if np.isnan(dudt):
+            print('dudt ERROR')
+            break 
         
         v = gem.Fv(lon, lat, z1, tnum)
         dvdx = gem.Fdvdx(lon, lat, z1, tnum)
         dvdy = gem.Fdvdy(lon, lat, z1, tnum)
         dvdz = gem.Fdvdz(lon, lat, z1, tnum)
         dvdt = gem.Fdvdt(lon, lat, z1, tnum)
+        if np.isnan(dvdt):
+            print('dvdt ERROR')
+            print(tnum)
+            print(lon)
+            print(lat)
+            print(z1)
+            break 
         
         N2 = np.abs(gem.Fn2(lon, lat, z1, tnum))
         dndx = gem.Fdndx(lon, lat, z1, tnum)
@@ -870,11 +1069,17 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
 
         # X step
         dx = tstep * CGx(N2, Omega, k, l, m, u, f)
+        if np.isnan(CGx(N2, Omega, k, l, m, u, f)):
+            print('dx Error')
+            break
         x  = x + dx # use this form instead of x+= because it modifies old values
     
         
         # Y step
         dy = tstep * CGy(N2, Omega, k, l, m, v, f)
+        if np.isnan(dy):
+            print('dy Error')
+            break
         y = y + dy
         
         # Z step
@@ -895,8 +1100,17 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
 
         # Refraction of internal wave through changing stratification
         rx = refraction(np.sqrt(N2), k, l, m, dndx, Omega)
+        if np.isnan(rx):
+            print['RX ERROR']
+            break 
         ry = refraction(np.sqrt(N2), k, l, m, dndy, Omega)
+        if np.isnan(ry):
+            print['Ry ERROR']
+            break 
         rz = refraction(np.sqrt(N2), k, l, m, dndz, Omega)
+        if np.isnan(rz):
+            print['Rz ERROR']
+            break 
         
 
         Omega = Omega + dOmega(rx, ry, rz, k, l, dudt, dvdt)
@@ -908,9 +1122,10 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
         lat = np.asscalar(lat2)
         
         # find nearest location in bathymetry grid
-        idx1 = np.argmin(np.abs(lon - gem.bathy['lon'][:]))
-        idx2 = np.argmin(np.abs(lat - gem.bathy['lat'][:]))
-        bottom = -1*gem.bathy['elevation'][idx2, idx1]
+        bottom  = -gem.bathyF(lon, lat)
+#        idx1 = np.argmin(np.abs(lon - gem.bathy['lon'][:]))
+#        idx2 = np.argmin(np.abs(lat - gem.bathy['lat'][:]))
+#        bottom = -1*gem.bathy['elevation'][idx2, idx1]
         
         
         # store data 
@@ -930,6 +1145,11 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
         u_all.append(u)
         v_all.append(v)
         N2_all.append(N2)
+        rx_all.append(rx)
+        ry_all.append(ry)
+        rz_all.append(rz)
+        dudz_all.append(dudz)
+        dvdz_all.append(dvdz)
 
         # Check Parameters before next step
         if z > bottom:
@@ -947,27 +1167,51 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
         # Boundary checks on rbf functions
 
         if lon <= lonlims[0] or lon >= lonlims[1]:
-            lonlims, latlims, tlims = gem.interpfield(lon, lat, z, t)
+#            lonlims, latlims, tlims = gem.interpfield_lnd(lon, lat, z, t)
             print('WARNING: satGEM field functions must be regenerated')
-            continue
+            break
+
         
         if lat <= latlims[0] or lat >= latlims[1]:
-            lonlims, latlims, tlims = gem.interpfield(lon, lat, z, t)
+#            lonlims, latlims, tlims = gem.interpfield_lnd(lon, lat, z, t)
             print('WARNING: satGEM field functions must be regenerated')
-            continue
+            break
+
 
         if tnum <= tlims[0] or lat >= tlims[1]:
-            lonlims, latlims, tlims = gem.interpfield(lon, lat, z, t)
+#            lonlims, latlims, tlims = gem.interpfield_lnd(lon, lat, z, t)
             print('WARNING: satGEM field functions must be regenerated')
-            continue
+            break
         print(t)
 
 
     # After ray tracing loop
-
-    # store all results in dictionary (keeps things concise when using)
+    print(i)
+    print(len(time))
     elapsed_time = np.vstack([(timeIn - time[0]).total_seconds() 
-                    for timeIn in time[:i + 2]])
+                    for timeIn in time[:i+2]])
+    
+    # Extend Bathymetry data so you can see whats just beyond end of ray trace
+    ext = np.arange(0, extend_bathy, 10)
+    x_extend = np.full_like(ext, np.nan)
+    y_extend = np.full_like(ext, np.nan)
+    b_extend = np.full_like(ext, np.nan)
+    for i in range(len(ext)):
+        x = x + dx
+        y = y + dy
+        lon2, lat2 = inverse_hav(dx, dy, lon, lat)
+        lon = np.asscalar(lon2) 
+        lat = np.asscalar(lat2)
+        bottom  = -gem.bathyF(lon, lat)
+        x_extend[i] = x
+        y_extend[i] = y
+        b_extend[i] = bottom
+        
+        
+
+        
+    
+    # store all results in dictionary (keeps things concise when using)
 
     results = {
             'x': np.vstack(x_all),
@@ -980,7 +1224,8 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
             'lon': np.vstack(lon_all),
             'lat': np.vstack(lat_all),
             'time': time[:i+1],
-            'elapsed_time': elapsed_time
+            'elapsed_time': elapsed_time,
+            'u': np.vstack(u_all)
 
     }
     
@@ -990,12 +1235,24 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
     # Had to add this condition for when the run quits out on first step
     if bathy:
         results['bathy'] = np.vstack(bathy)
+        results['bathy_ext'] = np.hstack((results['bathy'].flatten(), b_extend))
+        results['x_ext'] = np.hstack((results['x'].flatten(), x_extend))
+        results['y_ext'] = np.hstack((results['y'].flatten(), y_extend))
         results['cgx'] = np.vstack(cgx)
         results['cgy'] = np.vstack(cgy)
         results['cgz'] = np.vstack(cgz)
         results['N2'] = np.vstack(N2_all)
+        results['rx'] = np.vstack(rx_all)
+        results['ry'] = np.vstack(ry_all)
+        results['rz'] = np.vstack(rz_all)
+        results['dudz'] = np.vstack(dudz_all)
+        results['dvdz'] = np.vstack(dvdz_all)
 
-        
+
+    if N2subgrid is not None:
+        results['N2sub'] = N2subgrid
+        results['lonvec'] = lonvec
+        results['latvec'] = latvec
 
 
 #    N2_all = np.vstack(N2_all)
@@ -1040,9 +1297,100 @@ Time Direction: {}
 
 
 
+def testing():
+    """
+    variables used for testing ray tracing (taken from transect observations)
+    
+    """
+    
+    towyo_date = datetime(2012, 2, 28, 21, 33, 44)
+    start_time = datetime(2012, 2, 28, 21, 33, 44)
+    gem = satGEM_mini()
+    lon = -49.24
+    lat = -53.56
+    k0 = 0.000379449
+    omega = -0.000147305 	
+    l0 = -0.000395896
+    m0 = -0.0062492
+    w0 = -0.00014730
+    
+    
+    omega = -0.000147305
+    k0 = 0.000379449
+    l0 = -2.26563e-05
+    m0 = -0.0062492
+    z = 1536
+    lat = -53.56228373
+    lon = -49.23690843
+    
+    
+    wave = Wave(k=k0, l=l0, m=m0, w0=w0, z0=1500, t0=towyo_date,
+                lat=lat, lon=lon
+                )
+
+    
+    ray_tracing_interp(wave, gem, duration=4*24,
+                       tstep=5,
+                       time_direction='reverse',
+                       latpad=5, lonpad=5, tpad=2,
+                       extend_bathy=10*1000,
+                       interp_mode='lnd', interp_function='linear')
+    
+    results = wave.results
+#    
+    plot_results(results, gem)
+    
+    plt.figure()
+    plt.plot(results['elapsed_time'][:-1]/3600, results['u']*results['k'][1:])
+    
+    plt.figure()
+    plt.plot(results['elapsed_time'][:-1]/3600, results['N2'])
+    
+#    
+#    latlims = np.array([np.nanmin(results['lat']) - buffer,
+#                        np.nanmax(results['lat']) + buffer])
+#    latlims = [np.argmin(np.abs(lat_in - gem.bathy['lat'][:])) 
+#                        for lat_in in latlims]
+#    latlims = np.arange(latlims[0], latlims[1])
+#
+#    lonlims = np.array([np.nanmin(results['lon']) - buffer,
+#                        np.nanmax(results['lon']) + buffer])
+#    lonlims = [np.argmin(np.abs(lon_in - gem.bathy['lon'][:])) 
+#                        for lon_in in lonlims]
+#    lonlims = np.arange(lonlims[0], lonlims[1])
+#
+#    bathy_rev = gem.bathy['elevation'][latlims, lonlims]
+#    lat_b = gem.bathy['lat'][latlims]
+#    lon_b = gem.bathy['lon'][lonlims]
+#    
+#    lonmesh, latmesh = np.meshgrid(lon_b.flatten(), lat_b.flatten())
+#
+#    clevels = np.linspace(np.nanmin(bathy_rev), np.nanmax(bathy_rev), cls)
+#    fig = plt.figure()
+#    ax = fig.add_subplot(111, projection='3d')
+#    ax.plot_surface(lonmesh, latmesh, -bathy_rev)
+#    ax.plot(results['lon'].flatten(), results['lat'].flatten(), results['z'].flatten())
+#    ax.invert_zaxis()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def plot_results(results, gem, lc='#ff3f02',
-                lw=1.5, ms=20, buffer=0.2, cls=20,
+                lw=1.5, ms=20, buffer=0.2, cls=30,
                  testing=False):
     """
     Quick function for plotting a ray path over local bathymetry with
@@ -1095,29 +1443,16 @@ def plot_results(results, gem, lc='#ff3f02',
 
     # Generate transec bathymetry (interpolate to smooth)
     
-
-    bathy1, idx1 = np.unique(results['bathy'], return_index=True)
-    bathy1 = np.vstack([results['bathy'][index] for index in sorted(idx1)])
-    x1 = np.vstack([distance[index] for index in sorted(idx1)])
-    bathy_rev = np.interp(distance.flatten(),  x1.flatten(), bathy1.flatten())
-
     plt.subplot(222)
-    
-#    if testing:
-#        plt.contourf(results['N2_xgrid'], results['N2_grid'], np.log10(N2_grid))
-#
-#    else:
-#        if len(distance) == N2_grid.shape[0]:
-#            x2 = np.tile(distance, (1, N2_grid.shape[1]))
-#        else:    
-#            x2 = np.tile(distance[:-1], (1, N2_grid.shape[1]))
-#        plt.contourf(x2, p_grid, np.log10(np.abs(N2_grid)),
-#                                cmap=cmocean.cm.tempo)
-#    c1 = plt.colorbar()
-#    c1.set_label('Log10 (N2)')
+    distance1 = (1e-3 * np.sqrt(results['x_ext']**2 + results['y_ext']**2))
+    bathy1, idx1 = np.unique(results['bathy_ext'], return_index=True)
+    bathy1 = np.vstack([results['bathy_ext'][index] for index in sorted(idx1)])
+    x1 = np.vstack([distance1[index] for index in sorted(idx1)])
+    bathy_rev = np.interp(distance1.flatten(),  x1.flatten(), bathy1.flatten())
     plt.plot(distance, results['z'], c=lc, linewidth=lw)
-    plt.fill_between(distance.flatten(), bathy_rev.flatten(), 6000,
+    plt.fill_between(distance1.flatten(), bathy_rev.flatten(), 6000,
                      facecolor='#606060')
+
 
     plt.scatter(distance[0], results['z'][0],
                                      marker='*', c='#00ff32', s=ms)
@@ -1134,8 +1469,8 @@ def plot_results(results, gem, lc='#ff3f02',
                                 c=lc, linewidth=lw)
     plt.gca().format_xdata = mdates.DateFormatter('%h')
     plt.xlabel('Time (Hours)')
-    plt.ylabel('vertical_wavelencth(')
-    plt.title(' Vertical Wavenumber vs. Time')
+    plt.ylabel('vertical Wavelength')
+    plt.title(' Vertical Wavelength Evolution')
 
     plt.subplot(224)
     
@@ -1143,12 +1478,10 @@ def plot_results(results, gem, lc='#ff3f02',
                     c=lc, linewidth=lw, label=r'$\omega^2$')
     plt.plot(results['elapsed_time'] / 3600, np.log10(f),
                     c='k', linewidth=lw, label='f^2')
-    ax2 = plt.gca().twinx()
-    plt.plot(results['elapsed_time'][1:]/3600, np.log10(results['N2']),
-                    c=lc, linewidth=lw, label=r'$N2$')
+
     plt.legend()
     plt.xlabel('Time (Hours)')
-    plt.ylabel(r'log ($\omega$)')
+    plt.ylabel(r'$log (s^{-2})$')
     plt.title(' Frequency vs. Time')
 
     title = """
@@ -1171,39 +1504,4 @@ k0 = {}, l0 = {}, m0 = {}, w0 = {}
 
     return fig
 
-
-def testing():
-    """
-    variables used for testing ray tracing (taken from transect observations)
-    
-    """
-    
-    towyo_date = datetime(2012, 2, 28, 21, 33, 44)
-    start_time = datetime(2012, 2, 28, 21, 33, 44)
-    gem = satGEM_mini()
-    lon = -49.24
-    lat = -53.56
-    k0 = 0.000379449
-    l0 = -0.000395896
-    m0 = -0.0062492
-    w0 = -0.00014730
-    z =1500
-    wave = Wave(k=k0, l=l0, m=m0, w0=w0, z0=1500, t0=towyo_date,
-                lat=lat, lon=lon
-                )
-
-    
-    ray_tracing_interp(wave, gem, duration=24,
-                       tstep=30,
-                       time_direction='reverse',
-                       interp_function='linear')
-    
-    results = wave.results
-    
-    plt.plot(results['x'], results['z'])
-    plt.gca().invert_yaxis()
-    
-
-    plot_results(results, gem)
-    
     
