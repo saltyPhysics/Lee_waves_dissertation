@@ -603,7 +603,7 @@ class satGEM_mini(object):
         
         latmesh, lonmesh, dmesh, tmesh = np.meshgrid(latvec,
                                              lonvec,
-                                             gem.N2grid[:],
+                                             self.N2grid[:],
                                              tvec, sparse=False)
 #        mask = ~np.isnan(n2_sub)
 #        # radial basis function interpolator instance
@@ -639,7 +639,7 @@ class satGEM_mini(object):
         latvec = self.centerlat[clat_id1:clat_id2+1]
         latmesh, lonmesh, dmesh, tmesh = np.meshgrid(latvec,
                                              lonvec,
-                                             gem.depth_grid[:],
+                                             self.depth_grid[:],
                                              tvec, sparse=False)
         
         names = ['Fu', 'Fdudx', 'Fdudy', 'Fdudz','Fdudt']
@@ -666,7 +666,7 @@ class satGEM_mini(object):
         
         latmesh, lonmesh, dmesh, tmesh = np.meshgrid(latvec,
                                              clonvec,
-                                             gem.depth_grid[:],
+                                             self.depth_grid[:],
                                              tvec, sparse=False)
         # create rbf functions for each paramater F(lon, lat, depth, time)
         names = ['Fv', 'Fdvdx', 'Fdvdy', 'Fdvdz','Fdvdt']
@@ -742,7 +742,7 @@ class satGEM_mini(object):
         
         latmesh, lonmesh, dmesh, tmesh = np.meshgrid(latvec,
                                              lonvec,
-                                             gem.N2grid[:],
+                                             self.N2grid[:],
                                              tvec, sparse=False)
 
 
@@ -770,7 +770,7 @@ class satGEM_mini(object):
         latvec = self.centerlat[clat_id1:clat_id2+1]
         latmesh, lonmesh, dmesh, tmesh = np.meshgrid(latvec,
                                              lonvec,
-                                             gem.depth_grid[:],
+                                             self.depth_grid[:],
                                              tvec, sparse=False)
         
         names = ['Fu', 'Fdudx', 'Fdudy', 'Fdudz','Fdudt']
@@ -786,7 +786,7 @@ class satGEM_mini(object):
                                 tmesh[mask]]).T
             
             F = NearestNDInterpolator(points,
-                   subgrid[mask])
+                   subgrid[mask], rescale=True)
             
             setattr(self,names[i], F)
             
@@ -798,7 +798,7 @@ class satGEM_mini(object):
         
         latmesh, lonmesh, dmesh, tmesh = np.meshgrid(latvec,
                                              clonvec,
-                                             gem.depth_grid[:],
+                                             self.depth_grid[:],
                                              tvec, sparse=False)
         # create rbf functions for each paramater F(lon, lat, depth, time)
         names = ['Fv', 'Fdvdx', 'Fdvdy', 'Fdvdz','Fdvdt']
@@ -814,7 +814,7 @@ class satGEM_mini(object):
                                 tmesh[mask]]).T
             
             F = NearestNDInterpolator(points,
-                   subgrid[mask])
+                   subgrid[mask], rescale=True)
             
             setattr(self,names[i], F)
         
@@ -1182,7 +1182,7 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
 #            lonlims, latlims, tlims = gem.interpfield_lnd(lon, lat, z, t)
             print('WARNING: satGEM field functions must be regenerated')
             break
-        print(t)
+        # print(t)
 
 
     # After ray tracing loop
