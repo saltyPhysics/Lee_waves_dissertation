@@ -1012,3 +1012,18 @@ def magnify():
             dict(selector="tr:hover td:hover",
                  props=[('max-width', '200px'),
                         ('font-size', '18pt')])]
+
+
+class LinearNDInterpolatorExt(object):
+
+    def __init__(self, points, values):
+        self.funcinterp = interp.LinearNDInterpolator(points, values)
+        self.funcnearest = scipy.interpolate.ndgriddata.NearestNDInterpolator(
+            points, values)
+
+    def __call__(self, *args):
+        t = self.funcinterp(*args)
+        if not np.isnan(t):
+            return t.item(0)
+        else:
+            return self.funcnearest(*args)

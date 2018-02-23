@@ -6,8 +6,8 @@ Ray tracing using satGEM fields
 CURRENT STATUS:
 load in satGEM data and rewrite functions to remove all assumptions and run in a 4d field. 
 
-- Figure out how to make k and l and m vary in all 4 dimensions (x,y,z, and t)
-- need a solid conversion method for x and y distances to lat and long (long is the tricker one)
+- How to choose best interpolation method and how to choose best time step
+- add more robust time stepping 
 
 
 
@@ -18,6 +18,7 @@ load in satGEM data and rewrite functions to remove all assumptions and run in a
 import numpy as np
 import gsw
 import oceans as oc
+from oceans import LinearNDInterpolatorExt
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import h5py
@@ -172,6 +173,13 @@ def EoZ(N2, w0, f, ):
     Ez = np.squeeze((w0**2 * (N2 - f**2))
                     / ((w0**2 - f**2)**(3 / 2) * (N2 - w0**2)**(1 / 2)))
     return Ez
+
+
+def action():
+    """
+    Adding Wave Action
+    """
+
 
 def refraction(N, k, l, m, dNdi, Omega):
     """
@@ -335,6 +343,20 @@ def dOmega(rx, ry, rz, k, l, dudt, dvdt):
 
     return dW
 
+
+def plane_wave(k, l, m, omega, f, t, p0, N2):
+    """
+    Plane wave fits of velocity and density perturbations from polarization relations (Cusack 2017)
+    """
+
+    # Amplitudes (from polarization relations)
+    u0 = p0*((k*omega + l*fj)/(omega**2 + f**2))
+    v0 = p0*((l*omega + k*fj)/(omega**2 + f**2))
+    w0 = p0 * ((-m*omega) / (N2 - omega**2))
+    # b0 = 
+    # p0 = 
+
+    return None
 
 
 def inverse_hav(x, y, lon1, lat1):
@@ -761,8 +783,8 @@ class satGEM_mini(object):
                                 dmesh[mask],
                                 tmesh[mask]]).T
             
-            F = NearestNDInterpolator(points,
-                   subgrid[mask], rescale=True)
+            F = LinearNDInterpolatorExt(points,
+                   subgrid[mask])
             
             setattr(self,names[i], F)
         
@@ -785,8 +807,8 @@ class satGEM_mini(object):
                                 dmesh[mask],
                                 tmesh[mask]]).T
             
-            F = NearestNDInterpolator(points,
-                   subgrid[mask], rescale=True)
+            F = LinearNDInterpolatorExt(points,
+                   subgrid[mask])
             
             setattr(self,names[i], F)
             
@@ -813,8 +835,8 @@ class satGEM_mini(object):
                                 dmesh[mask],
                                 tmesh[mask]]).T
             
-            F = NearestNDInterpolator(points,
-                   subgrid[mask], rescale=True)
+            F = LinearNDInterpolatorExt(points,
+                   subgrid[mask])
             
             setattr(self,names[i], F)
         
@@ -862,12 +884,27 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
     
     Parameters
     ----------
-    
-    
+    wave: Wave object
+    gem: satGEM (and bathymetry) data loaded as satGEM_mini object
+    time_direction: time direction of 
+                    ray tracing ('forward' (default) or 'reverse'))
+    duration: duration of run (HOURS) 
+    tstep: time step (SECONDS)
+    latpad: Latitude padding for subgrid (bigger padding = more satGEM data 
+            available but slower runtimes and possible memory issues)
+    lonpad: Longitude padding for subgrid (bigger padding = more satGEM data 
+            available but slower runtimes and possible memory issues)
+    tpad: Time padding for subgrid (bigger padding = more satGEM data 
+            available but slower runtimes and possible memory issues)
+    extend_bathy: distance(METERS) to extend bathymetry data past end of run
+    interp_mode: Method for interpolating and extrapolating through satGEM 
+                default = 'lnd', 'rbf'
+                Ray tracing is very sensitive to the methods with LND (linear interpolation) being the most consistent (other versions) need 
+                further working
     
     Returns
     -------
-    
+    results: Dictionary of all results 
     
     
     """
@@ -1186,8 +1223,6 @@ def ray_tracing_interp(wave, gem, time_direction='forward',
 
 
     # After ray tracing loop
-    print(i)
-    print(len(time))
     elapsed_time = np.vstack([(timeIn - time[0]).total_seconds() 
                     for timeIn in time[:i+2]])
     
@@ -1346,33 +1381,6 @@ def testing():
     plt.figure()
     plt.plot(results['elapsed_time'][:-1]/3600, results['N2'])
     
-#    
-#    latlims = np.array([np.nanmin(results['lat']) - buffer,
-#                        np.nanmax(results['lat']) + buffer])
-#    latlims = [np.argmin(np.abs(lat_in - gem.bathy['lat'][:])) 
-#                        for lat_in in latlims]
-#    latlims = np.arange(latlims[0], latlims[1])
-#
-#    lonlims = np.array([np.nanmin(results['lon']) - buffer,
-#                        np.nanmax(results['lon']) + buffer])
-#    lonlims = [np.argmin(np.abs(lon_in - gem.bathy['lon'][:])) 
-#                        for lon_in in lonlims]
-#    lonlims = np.arange(lonlims[0], lonlims[1])
-#
-#    bathy_rev = gem.bathy['elevation'][latlims, lonlims]
-#    lat_b = gem.bathy['lat'][latlims]
-#    lon_b = gem.bathy['lon'][lonlims]
-#    
-#    lonmesh, latmesh = np.meshgrid(lon_b.flatten(), lat_b.flatten())
-#
-#    clevels = np.linspace(np.nanmin(bathy_rev), np.nanmax(bathy_rev), cls)
-#    fig = plt.figure()
-#    ax = fig.add_subplot(111, projection='3d')
-#    ax.plot_surface(lonmesh, latmesh, -bathy_rev)
-#    ax.plot(results['lon'].flatten(), results['lat'].flatten(), results['z'].flatten())
-#    ax.invert_zaxis()
-
-
 
 
 
