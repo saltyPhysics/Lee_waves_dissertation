@@ -350,11 +350,18 @@ def plane_wave(k, l, m, omega, f, t, p0, N2):
     """
 
     # Amplitudes (from polarization relations)
-    u0 = p0*((k*omega + l*fj)/(omega**2 + f**2))
-    v0 = p0*((l*omega + k*fj)/(omega**2 + f**2))
-    w0 = p0 * ((-m*omega) / (N2 - omega**2))
+    u0 = np.absolute(p0*((k*omega + l*fj)/(omega**2 + f**2)))
+    v0 = np.absolute(p0*((l*omega + k*fj)/(omega**2 + f**2)))
+    w0 = np.absolute(p0 * ((-m*omega) / (N2 - omega**2)))
     # b0 = 
     # p0 = 
+
+    # plane wave fits
+    uprime = u0 * np.cos(x*k + l*y - omega*t)
+    vprime = v0 * np.cos(x*k + l*y - omega*t)
+    wprime = w0 * np.cos(x * k + l * y - omega * t)
+
+    #
 
     return None
 
